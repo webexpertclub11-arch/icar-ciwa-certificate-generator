@@ -36,12 +36,36 @@ export const downloadCertificateAsPDF = async (certificateRef, participantName) 
     tempContainer.appendChild(clonedEl);
     document.body.appendChild(tempContainer);
 
+    // Convert all SVG images to self-contained Base64 Data URIs so html2canvas captures them reliably
+    const imgElements = clonedEl.querySelectorAll('img');
+    await Promise.all(
+      Array.from(imgElements).map(async (img) => {
+        if (img.src && (img.src.includes('.svg') || img.src.includes('svg') || img.src.startsWith('blob:'))) {
+          try {
+            const response = await fetch(img.src);
+            const blob = await response.blob();
+            await new Promise((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                img.src = reader.result;
+                resolve();
+              };
+              reader.onerror = resolve;
+              reader.readAsDataURL(blob);
+            });
+          } catch (e) {
+            console.warn("Could not inline SVG image for PDF canvas generation:", e);
+          }
+        }
+      })
+    );
+
     // Brief stabilization pause for cloned images & rendering engine
     await new Promise((resolve) => setTimeout(resolve, 150));
 
-    // Capture unscaled canvas at 3.5x scale (~350 DPI ultra crisp output)
+    // Capture unscaled canvas at 4.5x scale (~450 DPI ultra crisp output, crystal-clear zoom)
     const canvas = await html2canvas(clonedEl, {
-      scale: 3.5,
+      scale: 4.5,
       useCORS: true,
       allowTaint: true,
       backgroundColor: '#ffffff',
@@ -66,7 +90,7 @@ export const downloadCertificateAsPDF = async (certificateRef, participantName) 
       document.body.removeChild(tempContainer);
     }
 
-    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+    const imgData = canvas.toDataURL('image/jpeg', 0.98);
 
     // Create A4 Landscape PDF (297mm x 210mm)
     const pdf = new jsPDF({
@@ -76,8 +100,8 @@ export const downloadCertificateAsPDF = async (certificateRef, participantName) 
       compress: true,
     });
 
-    // Fit image to A4 Landscape bounds
-    pdf.addImage(imgData, 'JPEG', 0, 0, 297, 210, undefined, 'FAST');
+    // Fit image to A4 Landscape bounds with high clarity rendering
+    pdf.addImage(imgData, 'JPEG', 0, 0, 297, 210, undefined, 'SLOW');
 
     const sanitizedName = participantName
       ? participantName.replace(/[^a-zA-Z0-9_\-\s]/g, '').trim().replace(/\s+/g, '_')

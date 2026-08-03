@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import './Certificate.css';
-import leftSideLogo from '../assets/leftsidelogo.png';
+import leftSideLogo from '../assets/international_womenfarmer.svg';
 import icarRightLogo from '../assets/icarlogoright.gif';
 import certificateHead from '../assets/certificate head.png';
 import { getCertificateSettings, getEffectiveTrainingDates } from '../utils/certificateSettings';
@@ -35,7 +35,7 @@ const Certificate = React.forwardRef(({ salutation = '', name, instituteName, at
 
       if (targetInst) {
         const cleanInst = targetInst.toLowerCase();
-        foundInst = orgs.find(o => 
+        foundInst = orgs.find(o =>
           (o.shortName || '').trim().toLowerCase() === cleanInst ||
           (o.fullName || '').trim().toLowerCase() === cleanInst
         ) || orgs.find(o =>
@@ -48,7 +48,7 @@ const Certificate = React.forwardRef(({ salutation = '', name, instituteName, at
         const zoneMatch = targetZone.match(/Zone\s+([IVX0-9]+)/i);
         if (zoneMatch) {
           const zoneStr = `Zone ${zoneMatch[1]}`.toLowerCase();
-          foundZone = orgs.find(o => 
+          foundZone = orgs.find(o =>
             (o.fullName || '').toLowerCase().includes(zoneStr) ||
             (o.shortName || '').toLowerCase().includes(zoneStr)
           );
@@ -92,7 +92,7 @@ const Certificate = React.forwardRef(({ salutation = '', name, instituteName, at
 
   const displayZone = resolvedZone || atariZone || 'ICAR-Agricultural Technology Application Research Institute, Zone I, Ludhiana';
   const validSerial = serialNumber || 'CIWA/2026/NOGRA/166';
-  
+
   // Dynamic hierarchical training dates statement (Participant-wise > Zone-wise > Global default)
   const displayTrainingDates = trainingDates || getEffectiveTrainingDates(validSerial, displayZone, customSettings?.trainingDates);
 
@@ -103,11 +103,11 @@ const Certificate = React.forwardRef(({ salutation = '', name, instituteName, at
   // Category Layout Format Flags
   const isKvk = activeCategory.startsWith('KVK') || activeCategory.includes('ATARI') || instUpper.includes('KVK') || zoneUpper.includes('ATARI');
   const isSauOrCau = activeCategory.includes('SAU') || activeCategory.includes('CAU');
-  
+
   // ICAR Institute is strictly true ONLY if category is ICAR Institute and NOT KVK / ATARI / SAU / CAU
   const isIcarInstitute = !isKvk && !isSauOrCau && (
-    activeCategory.includes('ICAR INSTITUTE') || 
-    activeCategory === 'ICAR' || 
+    activeCategory.includes('ICAR INSTITUTE') ||
+    activeCategory === 'ICAR' ||
     (instUpper.includes('ICAR') && !instUpper.includes('AGRICULTURAL TECHNOLOGY') && !instUpper.includes('KVK'))
   );
 
@@ -120,28 +120,27 @@ const Certificate = React.forwardRef(({ salutation = '', name, instituteName, at
 
   // Generate Dynamic High-Resolution QR Code
   useEffect(() => {
-    const verificationPayload = `ICAR-CIWA OFFICIAL CERTIFICATE VERIFICATION
+    const verificationPayload = `ICAR-CIWA OFFICIAL CERTIFICATE
 Serial No: ${validSerial}
 Participant: ${displayName}
 Institute: ${finalInstituteName || 'ICAR'}
 Zone: ${displayZone}
 Training: Strengthening Agriculture Research with Gender Perspective
 Organized By: ${settings.trainingOrganizer || 'ICAR-CIWA, Bhubaneswar'} (${displayTrainingDates})
-Status: VERIFIED & AUTHENTIC
-Verify Link: https://icar-ciwa.org.in/verify?sn=${encodeURIComponent(validSerial)}`;
+Status: VERIFIED & AUTHENTIC`;
 
     QRCode.toDataURL(verificationPayload, {
-      width: 280,
-      margin: 1,
+      width: 1000,
+      margin: 2,
       color: {
-        dark: '#4a3b10', // Rich dark brown matching certificate theme
+        dark: '#000000', // Pure black for maximum scanner contrast & optical readability
         light: '#ffffff'
       },
-      errorCorrectionLevel: 'H'
+      errorCorrectionLevel: 'L' // Low error correction for cleaner grid & larger scannable modules
     })
       .then(url => setQrCodeUrl(url))
       .catch(err => console.error("Error generating QR Code:", err));
-  }, [validSerial, displayName, finalInstituteName, displayZone, settings]);
+  }, [validSerial, displayName, finalInstituteName, displayZone, settings, displayTrainingDates]);
 
   return (
     <div className="certificate-wrapper">
@@ -164,10 +163,10 @@ Verify Link: https://icar-ciwa.org.in/verify?sn=${encodeURIComponent(validSerial
 
                 {/* Title Section */}
                 <div className="certificate-title-box">
-                  <img 
-                    src={certificateHead} 
-                    alt="Certificate of Completion" 
-                    className="certificate-head-img" 
+                  <img
+                    src={certificateHead}
+                    alt="Certificate of Completion"
+                    className="certificate-head-img"
                   />
                 </div>
 
@@ -235,10 +234,10 @@ Verify Link: https://icar-ciwa.org.in/verify?sn=${encodeURIComponent(validSerial
                     <div className="serial-text">Serial Number: {validSerial}</div>
                   </div>
                   <div className="signature-box">
-                    <img 
-                      src={settings.directorSignatureImage} 
-                      alt="Director Signature" 
-                      className="director-signature-img" 
+                    <img
+                      src={settings.directorSignatureImage}
+                      alt="Director Signature"
+                      className="director-signature-img"
                     />
                     <p className="sig-name">{settings.directorName || 'Dr. Mridula Devi'}</p>
                     <p className="sig-title">{settings.directorTitle || '(Director, ICAR-CIWA)'}</p>
