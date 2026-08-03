@@ -165,9 +165,9 @@ export const initializeDB = async () => {
         try { await db.execute(`CREATE INDEX IF NOT EXISTS idx_part_serial ON participants(serial_number);`); } catch (_) {}
         try { await db.execute(`CREATE INDEX IF NOT EXISTS idx_org_category ON organizations(category);`); } catch (_) {}
 
-        // Sync participants from Turso DB to LocalStorage
+        // Sync participants from Turso DB to LocalStorage and notify UI
         try {
-            const dbParticipants = await db.execute("SELECT * FROM participants ORDER BY id DESC");
+            const dbParticipants = await db.execute("SELECT * FROM participants ORDER BY name ASC");
             if (dbParticipants.rows && dbParticipants.rows.length > 0) {
                 const formattedList = dbParticipants.rows.map(row => ({
                     id: String(row.id || row.participant_id),
@@ -178,6 +178,9 @@ export const initializeDB = async () => {
                     trainingDates: row.training_dates || ''
                 }));
                 localStorage.setItem(PARTICIPANTS_STORAGE_KEY, JSON.stringify(formattedList));
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('icar_db_initialized', { detail: formattedList }));
+                }
             }
         } catch (e) {
             console.warn("Error syncing participants from Turso DB:", e);
@@ -187,6 +190,33 @@ export const initializeDB = async () => {
     } catch (err) {
         console.error("Failed to initialize DB:", err);
     }
+};
+
+/**
+ * Async fetch participants list directly from Turso DB to ensure fresh browser load without reload requirement
+ */
+export const fetchParticipantsFromTurso = async () => {
+    const db = getDb();
+    if (!db) return fetchParticipantsList();
+
+    try {
+        const dbParticipants = await db.execute("SELECT * FROM participants ORDER BY name ASC");
+        if (dbParticipants.rows && dbParticipants.rows.length > 0) {
+            const formattedList = dbParticipants.rows.map(row => ({
+                id: String(row.id || row.participant_id),
+                name: row.name,
+                serialNumber: row.serial_number,
+                instituteName: row.institute_name || '',
+                atariZone: row.atari_zone || '',
+                trainingDates: row.training_dates || ''
+            }));
+            localStorage.setItem(PARTICIPANTS_STORAGE_KEY, JSON.stringify(formattedList));
+            return formattedList;
+        }
+    } catch (e) {
+        console.warn("Error fetching participants from Turso DB:", e);
+    }
+    return fetchParticipantsList();
 };
 
 /**

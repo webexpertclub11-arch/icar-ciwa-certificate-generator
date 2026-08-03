@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import './LoginPage.css';
 import icarLogo from '../assets/icarlogoright.gif';
 import ciwaLogo from '../assets/leftsidelogo.png';
-import { fetchParticipantsList } from '../utils/dbTracker';
+import { fetchParticipantsList, fetchParticipantsFromTurso } from '../utils/dbTracker';
 import { verifyAdminPassword } from '../utils/adminAuth';
 import { isParticipantDownloadEnabled } from '../utils/certificateSettings';
 import { sendOtpEmail } from '../utils/emailService';
@@ -26,9 +26,29 @@ const LoginPage = ({ onLogin, onAdminExport }) => {
     const [adminError, setAdminError] = useState('');
     const [showAdminPassword, setShowAdminPassword] = useState(false);
 
-    // Load participants on mount
+    // Load participants on mount & fetch asynchronously from Turso DB for fresh browser sessions
     useEffect(() => {
+        // 1. Instant load from LocalStorage cache
         setParticipantsList(fetchParticipantsList());
+
+        // 2. Async fetch directly from Turso DB for immediate update on fresh browser load
+        fetchParticipantsFromTurso().then(list => {
+            if (list && list.length > 0) {
+                setParticipantsList(list);
+            }
+        });
+
+        // 3. Listen for DB initialization event
+        const handleDbInit = (e) => {
+            if (e.detail && Array.isArray(e.detail) && e.detail.length > 0) {
+                setParticipantsList(e.detail);
+            } else {
+                setParticipantsList(fetchParticipantsList());
+            }
+        };
+
+        window.addEventListener('icar_db_initialized', handleDbInit);
+        return () => window.removeEventListener('icar_db_initialized', handleDbInit);
     }, []);
 
     // OTP State
