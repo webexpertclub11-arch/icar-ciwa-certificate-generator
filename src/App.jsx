@@ -173,14 +173,10 @@ function App() {
     setIsLoggedIn(true);
   }, [showToast]);
 
-  // Initialize DB table, settings, security guard on mount (Always start on Login Page)
+  // Initialize DB table, settings, security guard, and session tokens on mount
   useEffect(() => {
     initializeDB();
     setCertSettings(getCertificateSettings());
-
-    // Force start page to always be Login Page on every fresh launch / page load
-    clearUserSessionToken();
-    clearAdminSessionToken();
 
     const cleanupSecurity = initSecurityGuard(
       (msg, triggerBlur = false) => {
@@ -195,10 +191,53 @@ function App() {
       }
     );
 
+    // 1. Check Admin Session Token (Unlimited / Persistent until explicit Exit)
+    try {
+      const adminTokenRaw = localStorage.getItem(ADMIN_SESSION_KEY);
+      if (adminTokenRaw) {
+        const adminSession = JSON.parse(adminTokenRaw);
+        if (adminSession && adminSession.role === 'admin') {
+          setIsAdminLoggedIn(true);
+          return () => { if (cleanupSecurity) cleanupSecurity(); };
+        }
+      }
+    } catch (e) {
+      console.warn("Notice restoring admin session token:", e);
+    }
+
+    // 2. Check User Session Token (10 Minutes Expiration Limit)
+    try {
+      const userTokenRaw = localStorage.getItem(USER_SESSION_KEY);
+      if (userTokenRaw) {
+        const userSession = JSON.parse(userTokenRaw);
+        if (userSession && userSession.role === 'user' && userSession.participant) {
+          const elapsedTime = Date.now() - (userSession.loginTime || 0);
+          if (elapsedTime < TEN_MINUTES_MS) {
+            handleLogin(userSession.participant, false);
+            const remainingTime = TEN_MINUTES_MS - elapsedTime;
+            const timer = setTimeout(() => {
+              clearUserSessionToken();
+              setIsLoggedIn(false);
+              showToast('⏳ Session Expired: Your 10-minute session has ended. Please log in again.', 'info');
+            }, remainingTime);
+
+            return () => {
+              clearTimeout(timer);
+              if (cleanupSecurity) cleanupSecurity();
+            };
+          } else {
+            clearUserSessionToken();
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Notice restoring user session token:", e);
+    }
+
     return () => {
       if (cleanupSecurity) cleanupSecurity();
     };
-  }, [showToast]);
+  }, [handleLogin, showToast]);
 
   const fullNameWithSalutation = participantName
     ? `${salutation ? salutation + ' ' : ''}${participantName}`
