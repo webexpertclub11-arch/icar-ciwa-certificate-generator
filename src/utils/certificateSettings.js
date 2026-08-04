@@ -1,4 +1,5 @@
 import defaultDirectorSign from '../assets/director sign.png';
+import { updateSystemConfig } from './dbTracker';
 
 const SETTINGS_STORAGE_KEY = 'icar_certificate_global_settings';
 
@@ -8,7 +9,7 @@ export const getDefaultCertificateSettings = () => ({
     directorTitle: '(Director, ICAR-CIWA)',
     trainingOrganizer: 'ICAR-Central Institute for Women in Agriculture, Bhubaneswar',
     trainingDates: 'during July 27-29, 2026.',
-    
+
     // Access Control & Download Window Schedule
     downloadEnabled: true,
     scheduleEnabled: false,
@@ -44,16 +45,33 @@ export const saveCertificateSettings = (newSettings) => {
         const current = getCertificateSettings();
         const updated = { ...current, ...newSettings };
         localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updated));
-        
+
+        // Save to Turso asynchronously
+        updateSystemConfig(updated).catch(e => console.error("Firebase sync error", e));
+
         // Dispatch custom event for real-time reactivity across components
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('icar_settings_updated', { detail: updated }));
         }
-        
+
         return { success: true, settings: updated };
     } catch (e) {
         console.error("Error saving certificate settings:", e);
         return { success: false, message: "Failed to save settings to storage." };
+    }
+};
+
+export const forceSetCertificateSettings = (newSettings) => {
+    try {
+        const current = getCertificateSettings();
+        const updated = { ...current, ...newSettings };
+        localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updated));
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('icar_settings_updated', { detail: updated }));
+        }
+        return { success: true, settings: updated };
+    } catch (e) {
+        return { success: false };
     }
 };
 
@@ -157,17 +175,17 @@ export const isParticipantDownloadEnabled = (serialNumber = '', atariZone = '') 
     const permissions = getParticipantPermissions() || {};
     const cleanSerial = serialNumber ? String(serialNumber).trim().toUpperCase() : '';
     const cleanZone = atariZone ? String(atariZone).trim() : '';
-    
+
     // 1. Check if individual serial is explicitly disabled
     if (cleanSerial && permissions.disabledSerials && permissions.disabledSerials[cleanSerial]) {
         return false;
     }
-    
+
     // 2. Check if entire ATARI Zone is disabled
     if (cleanZone && permissions.disabledZones && permissions.disabledZones[cleanZone]) {
         return false;
     }
-    
+
     return true;
 };
 
@@ -290,7 +308,7 @@ export const getEffectiveTrainingDates = (serialNumber = '', atariZone = '', par
     const activeZone = (dbZone || atariZone || '').trim();
     if (activeZone) {
         const zoneDates = getZoneTrainingDates();
-        
+
         // Direct key match check
         if (zoneDates[activeZone]) {
             return zoneDates[activeZone];

@@ -15,7 +15,9 @@ const UserDashboard = ({
   isLocked,
   downloadTime,
   onGoToCertificateWorkspace,
-  onLogout
+  onGoToSupport,
+  onLogout,
+  isAdminRestricted
 }) => {
   const [announcements, setAnnouncements] = useState([]);
   const [settingsVersion, setSettingsVersion] = useState(0);
@@ -71,7 +73,7 @@ const UserDashboard = ({
   };
 
   const windowStatus = checkDownloadWindowStatus();
-  const isDownloadAllowed = isParticipantDownloadEnabled(assignedSerialNumber);
+  const isDownloadAllowed = !isAdminRestricted && isParticipantDownloadEnabled(assignedSerialNumber);
 
   // Prevent duplicate "Dr. Dr." prefix if registered name already starts with Dr.
   const cleanRegistered = (registeredName || '').trim();
@@ -98,9 +100,15 @@ const UserDashboard = ({
           <button className="nav-pill-btn active">
             📊 Dashboard
           </button>
-          <button className="nav-pill-btn" onClick={onGoToCertificateWorkspace}>
-            📜 My Certificate
-          </button>
+          {!isDownloadAllowed ? (
+            <button className="nav-pill-btn" onClick={onGoToSupport}>
+              ⚠️ Contact Support
+            </button>
+          ) : (
+            <button className="nav-pill-btn" onClick={onGoToCertificateWorkspace}>
+              📜 My Certificate
+            </button>
+          )}
         </nav>
 
         {/* User Info & Action Group */}
@@ -252,9 +260,15 @@ const UserDashboard = ({
             </div>
 
             <div className="cta-box-bottom">
-              <button className="btn-user-primary width-100" onClick={onGoToCertificateWorkspace}>
-                {isLocked ? '📜 View / Download Official PDF' : '🎓 Generate My Certificate Now →'}
-              </button>
+              {!isDownloadAllowed ? (
+                <button className="btn-user-primary width-100" style={{ backgroundColor: '#ef4444' }} onClick={onGoToSupport}>
+                  ⚠️ Contact Admin to Unlock Access
+                </button>
+              ) : (
+                <button className="btn-user-primary width-100" onClick={onGoToCertificateWorkspace}>
+                  {isLocked ? '📜 View / Download Official PDF' : '🎓 Generate My Certificate Now →'}
+                </button>
+              )}
             </div>
           </div>
 

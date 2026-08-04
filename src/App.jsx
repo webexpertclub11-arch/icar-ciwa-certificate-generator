@@ -5,9 +5,10 @@ import PasswordModal from './components/PasswordModal';
 import LoginPage from './components/LoginPage';
 import AdminDashboard from './components/AdminDashboard';
 import UserDashboard from './components/UserDashboard';
+import SupportTicketPage from './components/SupportTicketPage';
 import { downloadCertificateAsPDF, printCertificate } from './utils/downloadCertificate';
-import { initializeDB, recordDownloadToTurso, checkCertificateLockStatus, fetchOrganizationsList } from './utils/dbTracker';
-import { getCertificateSettings, isParticipantDownloadEnabled, checkDownloadWindowStatus } from './utils/certificateSettings';
+import { initializeDB, recordDownloadToTurso, checkCertificateLockStatus, fetchOrganizationsList, fetchSystemConfig } from './utils/dbTracker';
+import { getCertificateSettings, isParticipantDownloadEnabled, checkDownloadWindowStatus, getParticipantPermissions, forceSetCertificateSettings } from './utils/certificateSettings';
 import { initSecurityGuard } from './utils/securityGuard';
 
 const USER_SESSION_KEY = 'icar_user_session_token';
@@ -40,11 +41,11 @@ const saveAdminSessionToken = () => {
 };
 
 const clearUserSessionToken = () => {
-  try { localStorage.removeItem(USER_SESSION_KEY); } catch (_) {}
+  try { localStorage.removeItem(USER_SESSION_KEY); } catch (_) { }
 };
 
 const clearAdminSessionToken = () => {
-  try { localStorage.removeItem(ADMIN_SESSION_KEY); } catch (_) {}
+  try { localStorage.removeItem(ADMIN_SESSION_KEY); } catch (_) { }
 };
 
 function App() {
@@ -54,19 +55,20 @@ function App() {
   const [selectedZone, setSelectedZone] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-  
+
   // Navigation & Authentication states
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [userActiveTab, setUserActiveTab] = useState('dashboard'); // 'dashboard' or 'certificate'
   const [formStep, setFormStep] = useState('edit'); // 'edit' or 'preview'
+  const [isAdminRestricted, setIsAdminRestricted] = useState(false);
 
   const [assignedSerialNumber, setAssignedSerialNumber] = useState('CIWA/2026/NOGRA/166');
   const [registeredName, setRegisteredName] = useState('');
   const [participantContact, setParticipantContact] = useState({});
   const [participantTrainingDates, setParticipantTrainingDates] = useState('');
   const [participantCategory, setParticipantCategory] = useState('');
-  
+
   // Lock State & Immutability
   const [isLocked, setIsLocked] = useState(false);
   const [downloadTime, setDownloadTime] = useState(null);
@@ -99,7 +101,7 @@ function App() {
 
     const pName = participant.name;
     const sNo = participant.serialNumber || 'CIWA/2026/NOGRA/166';
-    
+
     setRegisteredName(pName);
     setAssignedSerialNumber(sNo);
     setParticipantTrainingDates(participant.trainingDates || '');
@@ -116,7 +118,7 @@ function App() {
       const cleanTarget = short.trim().toLowerCase();
 
       // Match exact org by shortName or fullName (do NOT match by category alone)
-      const org = orgs.find(o => 
+      const org = orgs.find(o =>
         (o.shortName || '').trim().toLowerCase() === cleanTarget ||
         (o.fullName || '').trim().toLowerCase() === cleanTarget
       ) || orgs.find(o =>
@@ -127,8 +129,8 @@ function App() {
       if (org) {
         const catUpper = (org.category || '').toUpperCase();
         const useShortName = catUpper.includes('ICAR') || catUpper.includes('SAU') || catUpper.includes('CAU');
-        return { 
-          fullName: useShortName ? (org.shortName || org.fullName) : (org.fullName || org.shortName), 
+        return {
+          fullName: useShortName ? (org.shortName || org.fullName) : (org.fullName || org.shortName),
           category: org.category,
           shortName: org.shortName || org.fullName,
           officialFullName: org.fullName || org.shortName
@@ -137,7 +139,7 @@ function App() {
       return { fullName: short, category: '', shortName: short, officialFullName: short };
     };
 
-    if (lockRecord && lockRecord.isLocked) {
+    if (lockRecord) {
       const orgData = getFullNameAndCategory(lockRecord.kvkName || '');
       const zoneData = getFullNameAndCategory(lockRecord.atariZone || '');
       setSalutation(lockRecord.salutation || '');
@@ -145,9 +147,16 @@ function App() {
       setInstituteName(orgData.fullName);
       setParticipantCategory(orgData.category || participant.category || '');
       setSelectedZone(orgData.officialFullName || zoneData.fullName || lockRecord.atariZone || '');
-      setIsLocked(true);
       setDownloadTime(lockRecord.downloadTime);
-      showToast('🔒 Locked Certificate Loaded: Previous issued certificate retrieved.', 'info');
+
+      if (lockRecord.isLocked) {
+        setIsLocked(true);
+        showToast('🔒 Locked Certificate Loaded: Previous issued certificate retrieved.', 'info');
+      } else {
+        setIsLocked(false);
+        setFormStep('edit');
+        showToast(`🔓 Unlocked Certificate Loaded: You can now edit your details.`, 'success');
+      }
     } else {
       const orgData = getFullNameAndCategory(participant.instituteName || '');
       const zoneData = getFullNameAndCategory(participant.atariZone || '');
@@ -169,13 +178,26 @@ function App() {
     }
 
     setCertSettings(getCertificateSettings());
-    setUserActiveTab('dashboard');
+
+    const permissions = getParticipantPermissions();
+    const isSpecificallyRestricted = (participant.isRestricted === 1 || participant.isRestricted === true) || (permissions?.disabledSerials?.[sNo] || (participant.atariZone && permissions?.disabledZones?.[participant.atariZone]));
+    const isAllowed = !isSpecificallyRestricted && isParticipantDownloadEnabled(sNo, participant.atariZone);
+    setUserActiveTab(isSpecificallyRestricted ? 'support' : 'dashboard');
+    setIsAdminRestricted(!!isSpecificallyRestricted);
+
     setIsLoggedIn(true);
   }, [showToast]);
 
   // Initialize DB table, settings, security guard, and session tokens on mount
   useEffect(() => {
-    initializeDB();
+    initializeDB().then(() => {
+      fetchSystemConfig().then(config => {
+        if (config) {
+          forceSetCertificateSettings(config);
+          setCertSettings(config);
+        }
+      });
+    });
     setCertSettings(getCertificateSettings());
 
     const cleanupSecurity = initSecurityGuard(
@@ -265,6 +287,7 @@ function App() {
     setParticipantName('');
     setIsLocked(false);
     setFormStep('edit');
+    setIsAdminRestricted(false);
   }, []);
 
   // Download PDF and immediately Lock Certificate
@@ -338,8 +361,8 @@ function App() {
     const orgs = await fetchOrganizationsList();
     const getFullNameAndCategory = (short) => {
       if (!short) return { fullName: '', category: '' };
-      const org = orgs.find(o => 
-        (o.shortName || '').toLowerCase() === short.toLowerCase() || 
+      const org = orgs.find(o =>
+        (o.shortName || '').toLowerCase() === short.toLowerCase() ||
         (o.name || '').toLowerCase() === short.toLowerCase() ||
         (o.fullName || '').toLowerCase() === short.toLowerCase()
       );
@@ -408,7 +431,22 @@ function App() {
         isLocked={isLocked}
         downloadTime={downloadTime}
         onGoToCertificateWorkspace={() => setUserActiveTab('certificate')}
+        onGoToSupport={() => setUserActiveTab('support')}
         onLogout={handleLogout}
+        isAdminRestricted={isAdminRestricted}
+      />
+    );
+  }
+
+  // Render Support Ticket Page
+  if (userActiveTab === 'support') {
+    return (
+      <SupportTicketPage
+        assignedSerialNumber={assignedSerialNumber}
+        registeredName={registeredName}
+        contactInfo={participantContact}
+        onExit={handleLogout}
+        isAdminRestricted={isAdminRestricted}
       />
     );
   }
@@ -484,9 +522,9 @@ function App() {
 
         {/* Scaled Preview Canvas Wrapper with Anti-Screenshot Blur Protection */}
         <div className="preview-content">
-          <div 
+          <div
             className="certificate-zoom-viewport"
-            style={{ 
+            style={{
               transform: `scale(${zoomLevel})`,
               transformOrigin: 'top center',
               transition: 'transform 0.2s ease-out',

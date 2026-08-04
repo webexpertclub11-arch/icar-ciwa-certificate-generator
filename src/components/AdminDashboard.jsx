@@ -16,7 +16,9 @@ import {
   fetchOrganizationsList,
   addOrganizationRecord,
   deleteOrganizationRecord,
-  bulkRegisterOrganizations
+  bulkRegisterOrganizations,
+  fetchAllSupportTickets,
+  updateSupportTicketStatus
 } from '../utils/dbTracker';
 import {
   getCertificateSettings,
@@ -98,6 +100,11 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
   const [announcements, setAnnouncements] = useState([]);
   const [newAnnouncementTitle, setNewAnnouncementTitle] = useState('');
   const [newAnnouncementMessage, setNewAnnouncementMessage] = useState('');
+
+  // Support Tickets State
+  const [supportTickets, setSupportTickets] = useState([]);
+  const [supportSearchQuery, setSupportSearchQuery] = useState('');
+  const [supportStatusFilter, setSupportStatusFilter] = useState('pending');
 
   // Certificate Settings State
   const [certSettings, setCertSettings] = useState(getCertificateSettings());
@@ -264,14 +271,16 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
     }
     setLoading(true);
     try {
-      const [metricsData, logsData, orgsData] = await Promise.all([
+      const [metricsData, logsData, orgsData, supportData] = await Promise.all([
         fetchAdminMetrics(),
         fetchAllDownloadLogs(),
-        fetchOrganizationsList()
+        fetchOrganizationsList(),
+        fetchAllSupportTickets()
       ]);
       setMetrics(metricsData);
       setLogs(logsData);
       setOrganizationsList(orgsData);
+      setSupportTickets(supportData);
 
       const pList = fetchParticipantsList();
       setParticipants(pList);
@@ -586,6 +595,11 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
     const isCurrentlyEnabled = isParticipantDownloadEnabled(serialNumber, atariZone);
     const newPermissions = setParticipantDownloadStatus([serialNumber], !isCurrentlyEnabled);
     setParticipantPermissions(newPermissions);
+
+    const targetParticipant = participants.find(p => p.serialNumber === serialNumber);
+    if (targetParticipant) {
+      updateParticipantRecord(targetParticipant.id, { isRestricted: isCurrentlyEnabled });
+    }
   };
 
   const handleToggleSelectParticipantRow = (serialNumber) => {
@@ -612,6 +626,14 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
     const serialsArray = Array.from(selectedParticipantSerials);
     const newPermissions = setParticipantDownloadStatus(serialsArray, enableStatus);
     setParticipantPermissions(newPermissions);
+
+    serialsArray.forEach(serial => {
+      const targetParticipant = participants.find(p => p.serialNumber === serial);
+      if (targetParticipant) {
+        updateParticipantRecord(targetParticipant.id, { isRestricted: !enableStatus });
+      }
+    });
+
     alert(`Updated download access for ${serialsArray.length} selected participants.`);
   };
 
@@ -622,6 +644,11 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
     }
     const newPermissions = setZoneDownloadStatus(atariZone, enableStatus);
     setParticipantPermissions(newPermissions);
+
+    participants.filter(p => p.atariZone === atariZone).forEach(p => {
+      updateParticipantRecord(p.id, { isRestricted: !enableStatus });
+    });
+
     alert(`All participants under ${atariZone} are now ${enableStatus ? 'ENABLED' : 'DISABLED'} for certificate downloads.`);
   };
 
@@ -817,6 +844,21 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
 
   // Filtered Logs
   const filteredLogs = useMemo(() => {
+    // Helper: find the category for a given institute name or zone value from organizationsList
+    const getOrgCategory = (value) => {
+      if (!value) return '';
+      const cleanVal = value.trim().toLowerCase();
+      const validOrgs = Array.isArray(organizationsList) ? organizationsList : [];
+      const matched = validOrgs.find(o =>
+        (o.shortName && o.shortName.trim().toLowerCase() === cleanVal) ||
+        (o.fullName && o.fullName.trim().toLowerCase() === cleanVal) ||
+        (o.category && o.category.trim().toLowerCase() === cleanVal) ||
+        (o.shortName && cleanVal.includes(o.shortName.trim().toLowerCase())) ||
+        (o.fullName && cleanVal.includes(o.fullName.trim().toLowerCase()))
+      );
+      return matched ? (matched.category || '') : '';
+    };
+
     return logs.filter(log => {
       const query = logSearchQuery.toLowerCase();
       const matchesSearch =
@@ -827,14 +869,39 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
         (log.email && log.email.toLowerCase().includes(query)) ||
         (log.atariZone && log.atariZone.toLowerCase().includes(query));
 
-      const matchesZone = !selectedZoneFilter ||
-        (log.atariZone && (log.atariZone === selectedZoneFilter || log.atariZone.toLowerCase().includes(selectedZoneFilter.toLowerCase()))) ||
-        (log.kvkName && log.kvkName.toLowerCase().includes(selectedZoneFilter.toLowerCase()));
+      let matchesZone = true;
+      if (selectedZoneFilter) {
+        const filterLower = selectedZoneFilter.toLowerCase().trim();
+        const logZoneLower = (log.atariZone || '').toLowerCase().trim();
+        const logKvkLower = (log.kvkName || '').toLowerCase().trim();
+
+        // 1. Direct exact match on atariZone
+        const directZoneMatch = logZoneLower === filterLower;
+
+        // 2. atariZone starts-with filter (handles minor suffix differences)
+        const zoneStartsMatch = logZoneLower.startsWith(filterLower) || filterLower.startsWith(logZoneLower);
+
+        // 3. Look up category of log.atariZone and compare to selectedZoneFilter
+        const atariZoneCategory = getOrgCategory(log.atariZone || '');
+        const atariZoneCategoryMatch = atariZoneCategory &&
+          atariZoneCategory.trim().toLowerCase() === filterLower;
+
+        // 4. Look up category of log.kvkName and compare to selectedZoneFilter
+        const kvkNameCategory = getOrgCategory(log.kvkName || '');
+        const kvkCategoryMatch = kvkNameCategory &&
+          kvkNameCategory.trim().toLowerCase() === filterLower;
+
+        // 5. Fallback: kvkName includes filter (for partial name searches)
+        const kvkNameMatch = logKvkLower && logKvkLower.includes(filterLower);
+
+        matchesZone = directZoneMatch || zoneStartsMatch || atariZoneCategoryMatch || kvkCategoryMatch || kvkNameMatch;
+      }
+
       const matchesStatus = !selectedStatusFilter || (selectedStatusFilter === 'locked' ? log.isLocked : !log.isLocked);
 
       return matchesSearch && matchesZone && matchesStatus;
     });
-  }, [logs, logSearchQuery, selectedZoneFilter, selectedStatusFilter]);
+  }, [logs, logSearchQuery, selectedZoneFilter, selectedStatusFilter, organizationsList]);
 
   const totalPages = Math.ceil(filteredLogs.length / itemsPerPage) || 1;
   const paginatedLogs = useMemo(() => {
@@ -885,7 +952,8 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
     organizations: 'Organizations & Institutions',
     updates: 'Training Announcements',
     settings: 'Certificate & Director Settings',
-    security: 'Security & Authentication'
+    security: 'Security & Authentication',
+    support: 'Support & Issues'
   };
 
   return (
@@ -933,11 +1001,17 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
             <span className="sb-nav-icon">🏢</span> Organizations
           </button>
 
-          <div className="sb-nav-label">Communication</div>
+          <div className="sb-nav-label">Communication & Support</div>
 
           <button className={`sb-nav-item ${activeTab === 'updates' ? 'active' : ''}`} onClick={() => setActiveTab('updates')}>
             <span className="sb-nav-icon">📢</span> Announcements
             {announcements.length > 0 && <span className="sb-nav-badge">{announcements.length}</span>}
+          </button>
+
+          <button className={`sb-nav-item ${activeTab === 'support' ? 'active' : ''}`} onClick={() => setActiveTab('support')}>
+            <span className="sb-nav-icon">🎫</span> Support Tickets
+            {supportTickets.filter(t => t.status === 'pending').length > 0 &&
+              <span className="sb-nav-badge" style={{ backgroundColor: '#ef4444' }}>{supportTickets.filter(t => t.status === 'pending').length} Action Required</span>}
           </button>
 
           <div className="sb-nav-label">System</div>
@@ -1370,7 +1444,7 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
                     className="select-filter-admin"
                   >
                     <option value="">🏢 Select Category...</option>
-                    
+
                     {/* 1. All KVK Categories */}
                     <optgroup label="📍 KVK Categories (ATARI Zones)">
                       {categoryFilterOptions.kvkList.map(cat => (
@@ -1683,9 +1757,9 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
                     <p>Add, edit, bulk import, and categorize ATARI KVKs, ICAR Institutes, SAUs, and CAUs live in Turso DB.</p>
                   </div>
                   <div className="action-buttons-flex" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    <button 
-                      type="button" 
-                      className="btn-admin-outline nowrap" 
+                    <button
+                      type="button"
+                      className="btn-admin-outline nowrap"
                       onClick={downloadSampleOrgExcelTemplate}
                       title="Download Excel Template for Bulk Institute Import"
                     >
@@ -1912,6 +1986,105 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
                   ) : (
                     <p style={{ color: '#64748b' }}>No published announcements available.</p>
                   )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB SUPPORT TICKETS */}
+          {activeTab === 'support' && (
+            <div className="animate-fade">
+              <div className="admin-card">
+                <div className="admin-card-header" style={{ marginBottom: '20px' }}>
+                  <div>
+                    <h3>🎫 Support & Issues Management</h3>
+                    <p>Review support tickets submitted by participants who are unable to generate certificates.</p>
+                  </div>
+                  <div>
+                    <select
+                      className="select-filter-admin"
+                      value={supportStatusFilter}
+                      onChange={(e) => setSupportStatusFilter(e.target.value)}
+                    >
+                      <option value="">⚙️ All Tickets</option>
+                      <option value="pending">🔴 Pending Action</option>
+                      <option value="resolved">🟢 Resolved / Closed</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="table-wrapper-admin">
+                  <table className="table-admin compact-table">
+                    <thead>
+                      <tr>
+                        <th>Status</th>
+                        <th>Participant Name</th>
+                        <th>Serial Number</th>
+                        <th>Contact</th>
+                        <th style={{ minWidth: '300px' }}>Issue Description</th>
+                        <th>Submitted At</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {supportTickets
+                        .filter(t => !supportStatusFilter || t.status === supportStatusFilter)
+                        .map(item => (
+                          <tr key={item.id}>
+                            <td>
+                              <span className={`status-badge-pill ${item.status === 'resolved' ? 'badge-emulator' : 'badge-unlocked'}`} style={{ backgroundColor: item.status === 'resolved' ? '#dcfce7' : '#fee2e2', color: item.status === 'resolved' ? '#166534' : '#991b1b' }}>
+                                {item.status === 'resolved' ? '🟢 Resolved' : '🔴 Pending'}
+                              </span>
+                            </td>
+                            <td><strong>{item.registeredName || '—'}</strong></td>
+                            <td><span className="clean-serial-text">{item.serialNumber || '—'}</span></td>
+                            <td>
+                              <div style={{ fontSize: '12.5px' }}>
+                                {item.email && <div>📧 {item.email}</div>}
+                                {item.mobile && <div>📱 {item.mobile}</div>}
+                                {!item.email && !item.mobile && <span className="text-empty-muted">—</span>}
+                              </div>
+                            </td>
+                            <td style={{ fontSize: '13px', lineHeight: '1.4' }}>
+                              {item.issueDescription}
+                            </td>
+                            <td>
+                              <div className="timestamp-cell">
+                                <span className="date-part">
+                                  {item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-IN') : '—'}
+                                </span>
+                              </div>
+                            </td>
+                            <td>
+                              <div className="action-btn-group">
+                                {item.status !== 'resolved' && (
+                                  <button
+                                    onClick={async () => {
+                                      if (confirm(`Mark ticket from ${item.registeredName} as Resolved?`)) {
+                                        await updateSupportTicketStatus(item.id, 'resolved');
+                                        triggerToast("Ticket marked as resolved.", "success");
+                                        loadDashboardData();
+                                      }
+                                    }}
+                                    className="btn-admin-outline"
+                                    style={{ color: '#059669', borderColor: '#059669', fontSize: '12px', padding: '6px 10px' }}
+                                  >
+                                    ✓ Resolve
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      {supportTickets.filter(t => !supportStatusFilter || t.status === supportStatusFilter).length === 0 && (
+                        <tr>
+                          <td colSpan="7" style={{ textAlign: 'center', color: '#64748b', padding: '20px' }}>
+                            No support tickets found matching the criteria.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
@@ -2317,7 +2490,16 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
                     required
                   >
                     <option value="">— Select ATARI Zone —</option>
-                    {atariZonesList.map(z => <option key={z.id} value={z.name}>{z.shortName}</option>)}
+                    <optgroup label="📍 KVK by ATARI Zone">
+                      {categoryFilterOptions.kvkList.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="🏛️ Institutes & Universities">
+                      {categoryFilterOptions.instList.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </optgroup>
                   </select>
                 </div>
 

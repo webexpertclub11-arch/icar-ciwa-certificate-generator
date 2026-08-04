@@ -59,14 +59,14 @@ export const initializeDB = async () => {
           download_time DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `);
-        
+
         try {
             await db.execute(`ALTER TABLE certificate_downloads ADD COLUMN salutation TEXT;`);
-        } catch (_) {}
-        
+        } catch (_) { }
+
         try {
             await db.execute(`ALTER TABLE certificate_downloads ADD COLUMN is_locked INTEGER DEFAULT 1;`);
-        } catch (_) {}
+        } catch (_) { }
 
         // Table 2: Registered Participants Roster
         await db.execute(`
@@ -78,9 +78,13 @@ export const initializeDB = async () => {
           institute_name TEXT,
           atari_zone TEXT,
           training_dates TEXT,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          is_restricted INTEGER DEFAULT 0
         )
       `);
+        try {
+            await db.execute(`ALTER TABLE participants ADD COLUMN is_restricted INTEGER DEFAULT 0;`);
+        } catch (_) { }
 
         // Table 3: Organizations & Categories (KVK, ICAR Institute, SAU, CAU)
         await db.execute(`
@@ -104,21 +108,30 @@ export const initializeDB = async () => {
         )
       `);
 
+        // Table 5: Global System Config
+        await db.execute(`
+        CREATE TABLE IF NOT EXISTS system_config (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
         // Ensure default superadmin row exists in admin_auth table
         try {
             const adminCheck = await db.execute(`SELECT * FROM admin_auth WHERE role = 'superadmin';`);
-                const initPass = (import.meta.env.VITE_INITIAL_ADMIN_PASSWORD || '').trim();
-                if (initPass) {
-                    await db.execute({
-                        sql: `INSERT INTO admin_auth (role, password_hash) VALUES ('superadmin', ?)`,
-                        args: [initPass]
-                    });
-                    console.log("Initialized superadmin credentials in Turso DB!");
-                }
+            const initPass = (import.meta.env.VITE_INITIAL_ADMIN_PASSWORD || '').trim();
+            if (initPass) {
+                await db.execute({
+                    sql: `INSERT INTO admin_auth (role, password_hash) VALUES ('superadmin', ?)`,
+                    args: [initPass]
+                });
+                console.log("Initialized superadmin credentials in Turso DB!");
+            }
         } catch (e) {
             console.warn("Notice seeding admin_auth:", e);
         }
-        
+
         // Physical migration to drop legacy 'name' column if present in live DB table
         try {
             const tableInfo = await db.execute(`PRAGMA table_info(organizations);`);
@@ -126,7 +139,7 @@ export const initializeDB = async () => {
 
             if (hasNameColumn) {
                 console.log("Migrating live database table 'organizations' to drop 'name' column...");
-                
+
                 await db.execute(`
                     CREATE TABLE organizations_temp (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -149,21 +162,21 @@ export const initializeDB = async () => {
                 console.log("Successfully dropped 'name' column and updated live 'organizations' table structure!");
             }
         } catch (migrationErr) {
-            try { await db.execute(`ALTER TABLE organizations DROP COLUMN name;`); } catch (_) {}
+            try { await db.execute(`ALTER TABLE organizations DROP COLUMN name;`); } catch (_) { }
         }
 
         try {
             await db.execute(`ALTER TABLE organizations ADD COLUMN short_name TEXT;`);
-        } catch (_) {}
+        } catch (_) { }
 
         try {
             await db.execute(`ALTER TABLE organizations ADD COLUMN full_name TEXT;`);
-        } catch (_) {}
+        } catch (_) { }
 
         // Indexes for performance
-        try { await db.execute(`CREATE INDEX IF NOT EXISTS idx_cert_serial ON certificate_downloads(serial_number);`); } catch (_) {}
-        try { await db.execute(`CREATE INDEX IF NOT EXISTS idx_part_serial ON participants(serial_number);`); } catch (_) {}
-        try { await db.execute(`CREATE INDEX IF NOT EXISTS idx_org_category ON organizations(category);`); } catch (_) {}
+        try { await db.execute(`CREATE INDEX IF NOT EXISTS idx_cert_serial ON certificate_downloads(serial_number);`); } catch (_) { }
+        try { await db.execute(`CREATE INDEX IF NOT EXISTS idx_part_serial ON participants(serial_number);`); } catch (_) { }
+        try { await db.execute(`CREATE INDEX IF NOT EXISTS idx_org_category ON organizations(category);`); } catch (_) { }
 
         // Sync participants from Turso DB to LocalStorage and notify UI
         try {
@@ -175,7 +188,8 @@ export const initializeDB = async () => {
                     serialNumber: row.serial_number,
                     instituteName: row.institute_name || '',
                     atariZone: row.atari_zone || '',
-                    trainingDates: row.training_dates || ''
+                    trainingDates: row.training_dates || '',
+                    isRestricted: row.is_restricted === 1
                 }));
                 localStorage.setItem(PARTICIPANTS_STORAGE_KEY, JSON.stringify(formattedList));
                 if (typeof window !== 'undefined') {
@@ -186,9 +200,23 @@ export const initializeDB = async () => {
             console.warn("Error syncing participants from Turso DB:", e);
         }
 
-        console.log("Turso Database initialized successfully with all tables (downloads, participants, organizations)!");
-    } catch (err) {
-        console.error("Failed to initialize DB:", err);
+        // Create support_tickets table (NEW MODULE)
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS support_tickets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                serial_number TEXT,
+                registered_name TEXT,
+                email TEXT,
+                mobile TEXT,
+                issue_description TEXT,
+                status TEXT DEFAULT 'pending',
+                created_at TEXT
+            )
+        `);
+
+        console.log("Turso Database checked/initialized successfully!");
+    } catch (e) {
+        console.error("Failed to initialize DB:", e);
     }
 };
 
@@ -208,7 +236,8 @@ export const fetchParticipantsFromTurso = async () => {
                 serialNumber: row.serial_number,
                 instituteName: row.institute_name || '',
                 atariZone: row.atari_zone || '',
-                trainingDates: row.training_dates || ''
+                trainingDates: row.training_dates || '',
+                isRestricted: row.is_restricted === 1
             }));
             localStorage.setItem(PARTICIPANTS_STORAGE_KEY, JSON.stringify(formattedList));
             return formattedList;
@@ -233,7 +262,7 @@ export const recordDownloadToTurso = async (data) => {
             downloadTime: data.downloadTime || istTime
         };
         localStorage.setItem(localKey, JSON.stringify(lockPayload));
-        
+
         if (data.registeredName) {
             localStorage.setItem(`icar_cert_lock_user_${data.registeredName.toLowerCase()}`, JSON.stringify(lockPayload));
         }
@@ -304,7 +333,7 @@ export const addParticipantRecord = (newParticipant) => {
         const currentList = fetchParticipantsList();
         const validCurrent = Array.isArray(currentList) ? currentList : [];
 
-        const existingIndex = validCurrent.findIndex(p => 
+        const existingIndex = validCurrent.findIndex(p =>
             p && p.serialNumber && p.serialNumber.trim().toUpperCase() === (newParticipant.serialNumber || '').trim().toUpperCase()
         );
 
@@ -330,7 +359,7 @@ export const addParticipantRecord = (newParticipant) => {
             (async () => {
                 try {
                     await db.execute({
-                        sql: `INSERT OR REPLACE INTO participants (participant_id, name, serial_number, institute_name, atari_zone, training_dates, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                        sql: `INSERT OR REPLACE INTO participants (participant_id, name, serial_number, institute_name, atari_zone, training_dates, created_at, is_restricted) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
                         args: [
                             newParticipant.id || '',
                             newParticipant.name || '',
@@ -338,7 +367,8 @@ export const addParticipantRecord = (newParticipant) => {
                             newParticipant.instituteName || '',
                             newParticipant.atariZone || '',
                             newParticipant.trainingDates || '',
-                            getIndianStandardTime()
+                            getIndianStandardTime(),
+                            newParticipant.isRestricted ? 1 : 0
                         ]
                     });
                     console.log("Successfully inserted/updated participant with IST timestamp in Turso DB!");
@@ -394,7 +424,8 @@ export const updateParticipantRecord = (id, updatedData) => {
                 serialNumber: updatedData.serialNumber ? updatedData.serialNumber.trim() : p.serialNumber,
                 instituteName: updatedData.instituteName !== undefined ? updatedData.instituteName.trim() : p.instituteName,
                 atariZone: updatedData.atariZone !== undefined ? updatedData.atariZone.trim() : p.atariZone,
-                trainingDates: updatedData.trainingDates !== undefined ? updatedData.trainingDates.trim() : p.trainingDates
+                trainingDates: updatedData.trainingDates !== undefined ? updatedData.trainingDates.trim() : p.trainingDates,
+                isRestricted: updatedData.isRestricted !== undefined ? updatedData.isRestricted : p.isRestricted
             };
             return updatedParticipant;
         }
@@ -412,13 +443,14 @@ export const updateParticipantRecord = (id, updatedData) => {
             (async () => {
                 try {
                     await db.execute({
-                        sql: `UPDATE participants SET name = ?, serial_number = ?, institute_name = ?, atari_zone = ?, training_dates = ? WHERE id = ? OR serial_number = ?`,
+                        sql: `UPDATE participants SET name = ?, serial_number = ?, institute_name = ?, atari_zone = ?, training_dates = ?, is_restricted = ? WHERE id = ? OR serial_number = ?`,
                         args: [
                             updatedParticipant.name || '',
                             updatedParticipant.serialNumber || '',
                             updatedParticipant.instituteName || '',
                             updatedParticipant.atariZone || '',
                             updatedParticipant.trainingDates || '',
+                            updatedParticipant.isRestricted ? 1 : 0,
                             id || '',
                             updatedParticipant.serialNumber || ''
                         ]
@@ -475,7 +507,7 @@ export const checkCertificateLockStatus = async (serialNumber, registeredName) =
                 email: row.email,
                 mobile: row.mobile,
                 wp: row.wp_no,
-                isLocked: true,
+                isLocked: row.is_locked === 1 || row.is_locked === '1' || row.is_locked === true,
                 downloadTime: row.download_time
             };
         }
@@ -505,7 +537,7 @@ export const updateUserCertificateRecord = async (targetSerialNumber, updatedDat
             localStorage.removeItem(localKey);
         }
         localStorage.setItem(`icar_cert_lock_${updatedPayload.serialNumber}`, JSON.stringify(updatedPayload));
-        
+
         if (updatedPayload.registeredName) {
             localStorage.setItem(`icar_cert_lock_user_${updatedPayload.registeredName.toLowerCase()}`, JSON.stringify(updatedPayload));
         }
@@ -571,9 +603,12 @@ export const unlockCertificateRecord = async (serialNumber, registeredName) => {
 
         const logsRaw = localStorage.getItem('icar_all_local_download_logs');
         if (logsRaw) {
-            const logs = JSON.parse(logsRaw).filter(item => 
-                item.serialNumber !== serialNumber && item.registeredName !== registeredName
-            );
+            const logs = JSON.parse(logsRaw).map(item => {
+                if (item.serialNumber === serialNumber || item.registeredName === registeredName) {
+                    return { ...item, isLocked: false };
+                }
+                return item;
+            });
             localStorage.setItem('icar_all_local_download_logs', JSON.stringify(logs));
         }
     } catch (e) {
@@ -585,7 +620,7 @@ export const unlockCertificateRecord = async (serialNumber, registeredName) => {
 
     try {
         await db.execute({
-            sql: `DELETE FROM certificate_downloads WHERE serial_number = ? OR registered_name = ?`,
+            sql: `UPDATE certificate_downloads SET is_locked = 0 WHERE serial_number = ? OR registered_name = ?`,
             args: [serialNumber || '', registeredName || '']
         });
         console.log("Successfully unlocked certificate record in Turso DB!");
@@ -600,7 +635,39 @@ export const unlockCertificateRecord = async (serialNumber, registeredName) => {
  * Delete a download log record permanently from DB and LocalStorage
  */
 export const deleteDownloadLogRecord = async (serialNumber, registeredName) => {
-    return await unlockCertificateRecord(serialNumber, registeredName);
+    try {
+        if (serialNumber) {
+            localStorage.removeItem(`icar_cert_lock_${serialNumber}`);
+        }
+        if (registeredName) {
+            localStorage.removeItem(`icar_cert_lock_user_${registeredName.toLowerCase()}`);
+        }
+
+        const logsRaw = localStorage.getItem('icar_all_local_download_logs');
+        if (logsRaw) {
+            const logs = JSON.parse(logsRaw).filter(item =>
+                item.serialNumber !== serialNumber && item.registeredName !== registeredName
+            );
+            localStorage.setItem('icar_all_local_download_logs', JSON.stringify(logs));
+        }
+    } catch (e) {
+        console.warn("LocalStorage delete log error:", e);
+    }
+
+    const db = getDb();
+    if (!db) return true;
+
+    try {
+        await db.execute({
+            sql: `DELETE FROM certificate_downloads WHERE serial_number = ? OR registered_name = ?`,
+            args: [serialNumber || '', registeredName || '']
+        });
+        console.log("Successfully deleted certificate record from Turso DB!");
+        return true;
+    } catch (err) {
+        console.error("Error deleting log in DB:", err);
+        return false;
+    }
 };
 
 /**
@@ -624,7 +691,7 @@ export const fetchAllDownloadLogs = async () => {
                 kvkName: row.kvk_name,
                 atariZone: row.atari_zone,
                 serialNumber: row.serial_number,
-                isLocked: row.is_locked === 1 || row.is_locked === '1' || true,
+                isLocked: row.is_locked === 1 || row.is_locked === '1' || row.is_locked === true,
                 downloadTime: row.download_time
             }));
         } catch (err) {
@@ -635,7 +702,7 @@ export const fetchAllDownloadLogs = async () => {
     try {
         const localLogsRaw = localStorage.getItem('icar_all_local_download_logs');
         const localLogs = localLogsRaw ? JSON.parse(localLogsRaw) : [];
-        
+
         const mergedMap = new Map();
         [...dbLogs, ...localLogs].forEach(item => {
             if (item.serialNumber && !mergedMap.has(item.serialNumber)) {
@@ -695,7 +762,7 @@ export const fetchAdminMetrics = async () => {
 export const bulkRegisterParticipants = (rawArray) => {
     const currentList = fetchParticipantsList();
     const existingSerials = new Set(currentList.map(p => p.serialNumber.trim().toUpperCase()));
-    
+
     const FIXED_PREFIX = 'CIWA/2026/NOGRA/';
     const newlyAdded = [];
     const skippedItems = [];
@@ -848,7 +915,7 @@ export const exportDBToExcel = async (logsToExport = null) => {
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Certificate Downloads');
-    XLSX.writeFile(workbook, `ICAR_Certificate_Downloads_${new Date().toISOString().slice(0,10)}.xlsx`);
+    XLSX.writeFile(workbook, `ICAR_Certificate_Downloads_${new Date().toISOString().slice(0, 10)}.xlsx`);
 };
 
 /**
@@ -1011,13 +1078,114 @@ export const updateAdminPasswordInDB = async (newPassword) => {
 
     try {
         await db.execute({
-            sql: `INSERT OR REPLACE INTO admin_auth (id, role, password_hash, updated_at) VALUES (1, 'superadmin', ?, ?);`,
-            args: [newPassword, getIndianStandardTime()]
+            sql: `UPDATE admin_auth SET password_hash = ? WHERE role = 'superadmin'`,
+            args: [newPassword]
         });
-        console.log("Successfully updated admin password in Turso DB!");
+        return true;
+    } catch (err) {
+        console.error("Error updating admin password:", err);
+        return false;
+    }
+};
+
+/**
+ * Support Ticket System Functions
+ */
+
+export const submitSupportTicket = async (ticketData) => {
+    const db = getDb();
+    if (!db) return false;
+
+    try {
+        await db.execute({
+            sql: `INSERT INTO support_tickets (serial_number, registered_name, email, mobile, issue_description, status, created_at)
+                  VALUES (?, ?, ?, ?, ?, 'pending', ?)`,
+            args: [
+                ticketData.serialNumber || '',
+                ticketData.registeredName || '',
+                ticketData.email || '',
+                ticketData.mobile || '',
+                ticketData.issueDescription || '',
+                getIndianStandardTime()
+            ]
+        });
+        console.log("Successfully submitted support ticket to Turso!");
+        return true;
+    } catch (err) {
+        console.error("Error updating support ticket:", err);
+        return false;
+    }
+};
+
+/**
+ * ==========================================
+ * SYSTEM CONFIG (For Certificate Settings)
+ * ==========================================
+ */
+export const fetchSystemConfig = async () => {
+    const db = getDb();
+    if (!db) return null;
+    try {
+        const result = await db.execute(`SELECT * FROM system_config WHERE key = 'certificate_settings'`);
+        if (result.rows.length > 0) {
+            return JSON.parse(result.rows[0].value);
+        }
+    } catch (e) {
+        console.error("Error fetching system config:", e);
+    }
+    return null;
+};
+
+export const updateSystemConfig = async (settingsObject) => {
+    const db = getDb();
+    if (!db) return false;
+    try {
+        const jsonStr = JSON.stringify(settingsObject);
+        await db.execute({
+            sql: `INSERT OR REPLACE INTO system_config (key, value, updated_at) VALUES ('certificate_settings', ?, CURRENT_TIMESTAMP)`,
+            args: [jsonStr]
+        });
         return true;
     } catch (e) {
-        console.error("Error updating admin password in Turso DB:", e);
+        console.error("Error updating system config:", e);
+        return false;
+    }
+};
+
+export const fetchAllSupportTickets = async () => {
+    const db = getDb();
+    if (!db) return [];
+
+    try {
+        const result = await db.execute("SELECT * FROM support_tickets ORDER BY created_at DESC");
+        return result.rows.map(row => ({
+            id: row.id,
+            serialNumber: row.serial_number,
+            registeredName: row.registered_name,
+            email: row.email,
+            mobile: row.mobile,
+            issueDescription: row.issue_description,
+            status: row.status,
+            createdAt: row.created_at
+        }));
+    } catch (err) {
+        console.error("Error fetching support tickets:", err);
+        return [];
+    }
+};
+
+export const updateSupportTicketStatus = async (id, newStatus) => {
+    const db = getDb();
+    if (!db) return false;
+
+    try {
+        await db.execute({
+            sql: `UPDATE support_tickets SET status = ? WHERE id = ?`,
+            args: [newStatus, id]
+        });
+        return true;
+    } catch (err) {
+        console.error("Error updating ticket status:", err);
         return false;
     }
 };
