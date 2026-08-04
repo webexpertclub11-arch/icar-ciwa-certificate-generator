@@ -413,6 +413,44 @@ export const deleteParticipantRecord = (id) => {
     return updatedList;
 };
 
+export const deleteParticipantRecordsBatch = (ids, serials = []) => {
+    const currentList = fetchParticipantsList();
+    const updatedList = currentList.filter(p => !ids.includes(p.id) && !serials.includes(p.serialNumber));
+
+    try {
+        localStorage.setItem(PARTICIPANTS_STORAGE_KEY, JSON.stringify(updatedList));
+    } catch (e) {
+        console.error("Error batch deleting participants:", e);
+    }
+
+    const db = getDb();
+    if (db && (ids.length > 0 || serials.length > 0)) {
+        (async () => {
+            try {
+                // SQLite IN clause requires placeholders
+                if (serials.length > 0) {
+                    const placeholders = serials.map(() => '?').join(',');
+                    await db.execute({
+                        sql: `DELETE FROM participants WHERE serial_number IN (${placeholders})`,
+                        args: serials
+                    });
+                } else if (ids.length > 0) {
+                    const placeholders = ids.map(() => '?').join(',');
+                    await db.execute({
+                        sql: `DELETE FROM participants WHERE id IN (${placeholders})`,
+                        args: ids
+                    });
+                }
+                console.log(`Successfully batch deleted ${ids.length || serials.length} participants from Turso DB!`);
+            } catch (err) {
+                console.error("Error batch deleting participants from Turso DB:", err);
+            }
+        })();
+    }
+
+    return updatedList;
+};
+
 export const updateParticipantRecord = (id, updatedData) => {
     const currentList = fetchParticipantsList();
     let updatedParticipant = null;
@@ -865,27 +903,29 @@ export const bulkRegisterParticipants = (rawArray) => {
 export const exportDBToExcel = async (logsToExport = null) => {
     const logs = logsToExport || await fetchAllDownloadLogs();
 
-    const excelData = logs.map((item, index) => ({
-        'S.No': index + 1,
-        'Registered Name': item.registeredName || 'N/A',
-        'Certificate Name': item.certificateName || item.registeredName || 'N/A',
-        'Salutation': item.salutation || 'N/A',
-        'Email': item.email || 'N/A',
-        'Mobile No': item.mobile || 'N/A',
-        'WhatsApp No': item.wp || item.wp_no || 'N/A',
-        'KVK Name': item.kvkName || 'N/A',
-        'ATARI Zone': item.atariZone || 'N/A',
-        'Serial Number': item.serialNumber || 'N/A',
-        'Lock Status': item.isLocked ? 'Locked' : 'Unlocked',
-        'Time of Download': item.downloadTime ? new Date(item.downloadTime).toLocaleString() : 'N/A'
-    }));
+    const excelData = logs.map((item, index) => {
+        const certName = item.certificateName || item.registeredName || 'N/A';
+        const combinedName = item.salutation && item.salutation.trim() ? `${item.salutation.trim()} ${certName}` : certName;
+        return {
+            'S.No': index + 1,
+            'Registered Name': item.registeredName || 'N/A',
+            'Certificate Name': combinedName,
+            'Email': item.email || 'N/A',
+            'Mobile No': item.mobile || 'N/A',
+            'WhatsApp No': item.wp || item.wp_no || 'N/A',
+            'KVK Name': item.kvkName || 'N/A',
+            'ATARI Zone': item.atariZone || 'N/A',
+            'Serial Number': item.serialNumber || 'N/A',
+            'Lock Status': item.isLocked ? 'Locked' : 'Unlocked',
+            'Time of Download': item.downloadTime ? new Date(item.downloadTime).toLocaleString() : 'N/A'
+        };
+    });
 
     if (excelData.length === 0) {
         excelData.push({
             'S.No': 1,
             'Registered Name': 'No downloads yet',
             'Certificate Name': 'N/A',
-            'Salutation': 'N/A',
             'Email': 'N/A',
             'Mobile No': 'N/A',
             'WhatsApp No': 'N/A',
@@ -901,8 +941,7 @@ export const exportDBToExcel = async (logsToExport = null) => {
     worksheet['!cols'] = [
         { wch: 6 },
         { wch: 25 },
-        { wch: 25 },
-        { wch: 12 },
+        { wch: 30 },
         { wch: 30 },
         { wch: 15 },
         { wch: 15 },
@@ -995,6 +1034,24 @@ export const deleteOrganizationRecord = async (id) => {
         return true;
     } catch (err) {
         console.error("Error deleting organization record:", err);
+        return false;
+    }
+};
+
+export const deleteOrganizationRecordsBatch = async (ids) => {
+    const db = getDb();
+    if (!db || !ids || ids.length === 0) return false;
+
+    try {
+        const placeholders = ids.map(() => '?').join(',');
+        await db.execute({
+            sql: `DELETE FROM organizations WHERE id IN (${placeholders})`,
+            args: ids
+        });
+        console.log(`Successfully batch deleted ${ids.length} organizations from Turso DB!`);
+        return true;
+    } catch (err) {
+        console.error("Error batch deleting organizations:", err);
         return false;
     }
 };

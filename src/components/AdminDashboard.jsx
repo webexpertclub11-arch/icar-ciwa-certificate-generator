@@ -11,11 +11,13 @@ import {
   fetchParticipantsList,
   addParticipantRecord,
   deleteParticipantRecord,
+  deleteParticipantRecordsBatch,
   updateParticipantRecord,
   bulkRegisterParticipants,
   fetchOrganizationsList,
   addOrganizationRecord,
   deleteOrganizationRecord,
+  deleteOrganizationRecordsBatch,
   bulkRegisterOrganizations,
   fetchAllSupportTickets,
   updateSupportTicketStatus
@@ -154,6 +156,7 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
 
   // Organizations & Categories State
   const [organizationsList, setOrganizationsList] = useState([]);
+  const [selectedOrgIds, setSelectedOrgIds] = useState(new Set());
   const [orgCategoryFilter, setOrgCategoryFilter] = useState('All');
   const [orgSearchQuery, setOrgSearchQuery] = useState('');
   const [newOrgCategory, setNewOrgCategory] = useState('KVK, ATARI Zone I, Ludhiana');
@@ -345,6 +348,46 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
     } else {
       triggerToast("Failed to delete organization.", "danger", "Delete Failed");
     }
+  };
+
+  const handleToggleSelectAllOrgs = (e) => {
+    if (e.target.checked) {
+      // Need to find filteredOrganizations scope or use organizationsList...
+      // We'll define it based on organizationsList for now, or paginated array in DOM.
+      // Wait, there's a bug if I just map all. Let's see how `filteredOrganizations` is defined later.
+      const allIds = new Set(organizationsList.map(o => o.id));
+      setSelectedOrgIds(allIds);
+    } else {
+      setSelectedOrgIds(new Set());
+    }
+  };
+
+  const handleToggleSelectOrgRow = (id) => {
+    const next = new Set(selectedOrgIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setSelectedOrgIds(next);
+  };
+
+  const handleBatchDeleteOrganizations = async () => {
+    if (selectedOrgIds.size === 0) return;
+    if (!window.confirm(`Are you sure you want to permanently delete ${selectedOrgIds.size} selected organizations?`)) {
+      return;
+    }
+    setLoading(true);
+    const success = await deleteOrganizationRecordsBatch(Array.from(selectedOrgIds));
+    if (success) {
+      triggerToast(`Successfully batch deleted ${selectedOrgIds.size} organizations.`, "success", "Organizations Deleted");
+      setSelectedOrgIds(new Set());
+      const updatedOrgs = await fetchOrganizationsList();
+      setOrganizationsList(updatedOrgs);
+    } else {
+      triggerToast("Failed to batch delete organizations.", "danger", "Delete Failed");
+    }
+    setLoading(false);
   };
 
   // Bulk Import Organizations / Institutes Handler
@@ -635,6 +678,18 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
     });
 
     alert(`Updated download access for ${serialsArray.length} selected participants.`);
+  };
+
+  const handleBatchDeleteParticipants = () => {
+    if (selectedParticipantSerials.size === 0) return;
+    if (!window.confirm(`Are you sure you want to permanently delete ${selectedParticipantSerials.size} selected participants?`)) {
+      return;
+    }
+    const serialsArray = Array.from(selectedParticipantSerials);
+    const updated = deleteParticipantRecordsBatch([], serialsArray);
+    setParticipants(updated);
+    setSelectedParticipantSerials(new Set());
+    alert(`Successfully deleted ${serialsArray.length} participants.`);
   };
 
   const handleBatchToggleZone = (atariZone, enableStatus) => {
@@ -1617,6 +1672,16 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
 
                     <button
                       type="button"
+                      className="btn-admin-danger"
+                      onClick={handleBatchDeleteParticipants}
+                      disabled={selectedParticipantSerials.size === 0}
+                      style={{ backgroundColor: '#dc2626' }}
+                    >
+                      🗑️ Delete Selected ({selectedParticipantSerials.size})
+                    </button>
+
+                    <button
+                      type="button"
                       className="btn-admin-gold"
                       onClick={handleExportSelectedToZip}
                       disabled={selectedParticipantSerials.size === 0}
@@ -1863,9 +1928,73 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
 
                 {/* Data Table */}
                 <div className="table-responsive-container">
+                  <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '13px', color: '#64748b' }}>
+                      Showing {(() => {
+                        const validOrgs = Array.isArray(organizationsList) ? organizationsList : [];
+                        return validOrgs.filter(org => {
+                          if (!org) return false;
+                          const categoryStr = org.category ? String(org.category) : '';
+                          const fullNameStr = org.fullName ? String(org.fullName) : '';
+                          const shortNameStr = org.shortName ? String(org.shortName) : '';
+                          const matchCat = orgCategoryFilter === 'All' ? true : orgCategoryFilter === 'All KVKs' ? categoryStr.startsWith('KVK') : categoryStr === orgCategoryFilter;
+                          const query = (orgSearchQuery || '').toLowerCase();
+                          const matchQuery = !query || fullNameStr.toLowerCase().includes(query) || categoryStr.toLowerCase().includes(query) || shortNameStr.toLowerCase().includes(query);
+                          return matchCat && matchQuery;
+                        }).length;
+                      })()} organizations
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-admin-danger"
+                      onClick={handleBatchDeleteOrganizations}
+                      disabled={selectedOrgIds.size === 0}
+                      style={{ backgroundColor: '#dc2626' }}
+                    >
+                      🗑️ Delete Selected ({selectedOrgIds.size})
+                    </button>
+                  </div>
                   <table className="admin-data-table">
                     <thead>
                       <tr>
+                        <th style={{ width: '40px' }}>
+                          <input
+                            type="checkbox"
+                            checked={(() => {
+                              const validOrgs = Array.isArray(organizationsList) ? organizationsList : [];
+                              const filtered = validOrgs.filter(org => {
+                                if (!org) return false;
+                                const categoryStr = org.category ? String(org.category) : '';
+                                const fullNameStr = org.fullName ? String(org.fullName) : '';
+                                const shortNameStr = org.shortName ? String(org.shortName) : '';
+                                const matchCat = orgCategoryFilter === 'All' ? true : orgCategoryFilter === 'All KVKs' ? categoryStr.startsWith('KVK') : categoryStr === orgCategoryFilter;
+                                const query = (orgSearchQuery || '').toLowerCase();
+                                const matchQuery = !query || fullNameStr.toLowerCase().includes(query) || categoryStr.toLowerCase().includes(query) || shortNameStr.toLowerCase().includes(query);
+                                return matchCat && matchQuery;
+                              });
+                              return filtered.length > 0 && filtered.every(o => selectedOrgIds.has(o.id));
+                            })()}
+                            onChange={(e) => {
+                              const validOrgs = Array.isArray(organizationsList) ? organizationsList : [];
+                              const filtered = validOrgs.filter(org => {
+                                if (!org) return false;
+                                const categoryStr = org.category ? String(org.category) : '';
+                                const fullNameStr = org.fullName ? String(org.fullName) : '';
+                                const shortNameStr = org.shortName ? String(org.shortName) : '';
+                                const matchCat = orgCategoryFilter === 'All' ? true : orgCategoryFilter === 'All KVKs' ? categoryStr.startsWith('KVK') : categoryStr === orgCategoryFilter;
+                                const query = (orgSearchQuery || '').toLowerCase();
+                                const matchQuery = !query || fullNameStr.toLowerCase().includes(query) || categoryStr.toLowerCase().includes(query) || shortNameStr.toLowerCase().includes(query);
+                                return matchCat && matchQuery;
+                              });
+                              if (e.target.checked) {
+                                const allIds = new Set(filtered.map(o => o.id));
+                                setSelectedOrgIds(allIds);
+                              } else {
+                                setSelectedOrgIds(new Set());
+                              }
+                            }}
+                          />
+                        </th>
                         <th>#</th>
                         <th>Category</th>
                         <th>Short Name</th>
@@ -1896,7 +2025,14 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
                           return matchCat && matchQuery;
                         })
                         .map((org, idx) => (
-                          <tr key={org.id || idx}>
+                          <tr key={org.id || idx} className={selectedOrgIds.has(org.id) ? 'row-selected' : ''}>
+                            <td>
+                              <input
+                                type="checkbox"
+                                checked={selectedOrgIds.has(org.id)}
+                                onChange={() => handleToggleSelectOrgRow(org.id)}
+                              />
+                            </td>
                             <td>{idx + 1}</td>
                             <td>
                               <span className="status-badge-pill badge-active">{org.category}</span>
@@ -2323,299 +2459,309 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
       </div>{/* end admin-main-area */}
 
       {/* BULK IMPORT MODAL */}
-      {isBulkImportOpen && (
-        <div className="modal-overlay-admin" onClick={() => setIsBulkImportOpen(false)}>
-          <div className="modal-card-admin" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-flex">
-              <h3>📦 Direct Excel Participant Import</h3>
-              <button className="btn-close-modal" onClick={() => setIsBulkImportOpen(false)}>✕</button>
-            </div>
-
-            <p style={{ fontSize: '13.5px', color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
-              Upload an Excel sheet (<code>.xlsx</code>, <code>.xls</code>, or <code>.csv</code>) matching our official format.<br />
-              Expected Column Headers: <strong>Serial No, Name, Category, Institute / KVK Name, Training Dates</strong>.
-            </p>
-
-            <form onSubmit={handleProcessExcelFileUpload} style={{ display: 'grid', gap: '16px', marginTop: '16px' }}>
-              <input
-                type="file"
-                accept=".xlsx, .xls, .csv"
-                onChange={(e) => setExcelFile(e.target.files[0])}
-                className="input-flex-admin"
-                required
-              />
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                <button type="button" className="btn-admin-outline" onClick={() => setIsBulkImportOpen(false)}>Cancel</button>
-                <button type="submit" className="btn-admin-gold" disabled={excelParsing}>
-                  {excelParsing ? 'Parsing Excel File...' : '📦 Import Excel & Register Users'}
-                </button>
+      {
+        isBulkImportOpen && (
+          <div className="modal-overlay-admin" onClick={() => setIsBulkImportOpen(false)}>
+            <div className="modal-card-admin" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header-flex">
+                <h3>📦 Direct Excel Participant Import</h3>
+                <button className="btn-close-modal" onClick={() => setIsBulkImportOpen(false)}>✕</button>
               </div>
-            </form>
+
+              <p style={{ fontSize: '13.5px', color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
+                Upload an Excel sheet (<code>.xlsx</code>, <code>.xls</code>, or <code>.csv</code>) matching our official format.<br />
+                Expected Column Headers: <strong>Serial No, Name, Category, Institute / KVK Name, Training Dates</strong>.
+              </p>
+
+              <form onSubmit={handleProcessExcelFileUpload} style={{ display: 'grid', gap: '16px', marginTop: '16px' }}>
+                <input
+                  type="file"
+                  accept=".xlsx, .xls, .csv"
+                  onChange={(e) => setExcelFile(e.target.files[0])}
+                  className="input-flex-admin"
+                  required
+                />
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                  <button type="button" className="btn-admin-outline" onClick={() => setIsBulkImportOpen(false)}>Cancel</button>
+                  <button type="submit" className="btn-admin-gold" disabled={excelParsing}>
+                    {excelParsing ? 'Parsing Excel File...' : '📦 Import Excel & Register Users'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* BULK IMPORT RESULT MODAL */}
-      {bulkResultModal && (
-        <div className="modal-overlay-admin" onClick={() => setBulkResultModal(null)}>
-          <div className="modal-card-admin" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-flex">
-              <h3>📋 Excel Import & Duplicate Check Results</h3>
-              <button className="btn-close-modal" onClick={() => setBulkResultModal(null)}>✕</button>
-            </div>
-
-            <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
-              <div style={{ flex: 1, padding: '16px', background: 'var(--accent-emerald-dim)', borderRadius: '12px', color: 'var(--accent-emerald)' }}>
-                <strong style={{ fontSize: '24px', display: 'block' }}>{bulkResultModal.successCount}</strong>
-                Registered Successfully
+      {
+        bulkResultModal && (
+          <div className="modal-overlay-admin" onClick={() => setBulkResultModal(null)}>
+            <div className="modal-card-admin" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header-flex">
+                <h3>📋 Excel Import & Duplicate Check Results</h3>
+                <button className="btn-close-modal" onClick={() => setBulkResultModal(null)}>✕</button>
               </div>
-              <div style={{ flex: 1, padding: '16px', background: 'var(--accent-rose-dim)', borderRadius: '12px', color: 'var(--accent-rose)' }}>
-                <strong style={{ fontSize: '24px', display: 'block' }}>{bulkResultModal.skippedCount}</strong>
-                Duplicates Skipped
-              </div>
-            </div>
 
-            <button type="button" className="btn-admin-primary" onClick={() => setBulkResultModal(null)}>
-              Close & Return
-            </button>
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+                <div style={{ flex: 1, padding: '16px', background: 'var(--accent-emerald-dim)', borderRadius: '12px', color: 'var(--accent-emerald)' }}>
+                  <strong style={{ fontSize: '24px', display: 'block' }}>{bulkResultModal.successCount}</strong>
+                  Registered Successfully
+                </div>
+                <div style={{ flex: 1, padding: '16px', background: 'var(--accent-rose-dim)', borderRadius: '12px', color: 'var(--accent-rose)' }}>
+                  <strong style={{ fontSize: '24px', display: 'block' }}>{bulkResultModal.skippedCount}</strong>
+                  Duplicates Skipped
+                </div>
+              </div>
+
+              <button type="button" className="btn-admin-primary" onClick={() => setBulkResultModal(null)}>
+                Close & Return
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* EDIT LOG MODAL */}
-      {editingLog && (
-        <div className="modal-overlay-admin" onClick={() => setEditingLog(null)}>
-          <div className="modal-card-admin" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-flex">
-              <h3>✏️ Edit Certificate DB Record ({editingLog.serialNumber})</h3>
-              <button className="btn-close-modal" onClick={() => setEditingLog(null)}>✕</button>
+      {
+        editingLog && (
+          <div className="modal-overlay-admin" onClick={() => setEditingLog(null)}>
+            <div className="modal-card-admin" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header-flex">
+                <h3>✏️ Edit Certificate DB Record ({editingLog.serialNumber})</h3>
+                <button className="btn-close-modal" onClick={() => setEditingLog(null)}>✕</button>
+              </div>
+
+              <form onSubmit={handleSaveUserDetailEdits} style={{ display: 'grid', gap: '14px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', display: 'block' }}>Salutation</label>
+                    <select
+                      value={editFormData.salutation}
+                      onChange={(e) => setEditFormData({ ...editFormData, salutation: e.target.value })}
+                      className="select-filter-admin"
+                      style={{ width: '100%' }}
+                    >
+                      <option value="">Salutation...</option>
+                      {salutations.map((s, i) => <option key={i} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', display: 'block' }}>Certificate Display Name</label>
+                    <input
+                      type="text"
+                      value={editFormData.certificateName}
+                      onChange={(e) => setEditFormData({ ...editFormData, certificateName: e.target.value })}
+                      placeholder="Name printed on Certificate"
+                      required
+                      className="input-flex-admin"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', display: 'block' }}>Registered Login Name</label>
+                  <input
+                    type="text"
+                    value={editFormData.registeredName}
+                    onChange={(e) => setEditFormData({ ...editFormData, registeredName: e.target.value })}
+                    placeholder="Registered Login Name"
+                    required
+                    className="input-flex-admin"
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', display: 'block' }}>Email Address</label>
+                    <input
+                      type="email"
+                      value={editFormData.email}
+                      onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                      placeholder="Email Address"
+                      className="input-flex-admin"
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', display: 'block' }}>Mobile Number</label>
+                    <input
+                      type="text"
+                      value={editFormData.mobile}
+                      onChange={(e) => setEditFormData({ ...editFormData, mobile: e.target.value })}
+                      placeholder="Mobile Number"
+                      className="input-flex-admin"
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', display: 'block' }}>WhatsApp Number</label>
+                    <input
+                      type="text"
+                      value={editFormData.wp}
+                      onChange={(e) => setEditFormData({ ...editFormData, wp: e.target.value })}
+                      placeholder="WhatsApp Number"
+                      className="input-flex-admin"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', display: 'block' }}>KVK / Institute Name</label>
+                  <input
+                    type="text"
+                    value={editFormData.kvkName}
+                    onChange={(e) => setEditFormData({ ...editFormData, kvkName: e.target.value })}
+                    placeholder="Institute / KVK Name"
+                    required
+                    className="input-flex-admin"
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', display: 'block' }}>ATARI Zone Category</label>
+                    <select
+                      value={editFormData.atariZone}
+                      onChange={(e) => setEditFormData({ ...editFormData, atariZone: e.target.value })}
+                      className="select-filter-admin"
+                      style={{ width: '100%' }}
+                      required
+                    >
+                      <option value="">— Select ATARI Zone —</option>
+                      <optgroup label="📍 KVK by ATARI Zone">
+                        {categoryFilterOptions.kvkList.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="🏛️ Institutes & Universities">
+                        {categoryFilterOptions.instList.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', display: 'block' }}>Serial Number</label>
+                    <input
+                      type="text"
+                      value={editFormData.serialNumber}
+                      onChange={(e) => setEditFormData({ ...editFormData, serialNumber: e.target.value })}
+                      placeholder="Serial Number"
+                      required
+                      className="input-flex-admin"
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                  <button type="button" className="btn-admin-outline" onClick={() => setEditingLog(null)}>Cancel</button>
+                  <button type="submit" className="btn-admin-primary">💾 Save & Update Record in Turso DB</button>
+                </div>
+              </form>
             </div>
-
-            <form onSubmit={handleSaveUserDetailEdits} style={{ display: 'grid', gap: '14px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px' }}>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', display: 'block' }}>Salutation</label>
-                  <select
-                    value={editFormData.salutation}
-                    onChange={(e) => setEditFormData({ ...editFormData, salutation: e.target.value })}
-                    className="select-filter-admin"
-                    style={{ width: '100%' }}
-                  >
-                    <option value="">Salutation...</option>
-                    {salutations.map((s, i) => <option key={i} value={s}>{s}</option>)}
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', display: 'block' }}>Certificate Display Name</label>
-                  <input
-                    type="text"
-                    value={editFormData.certificateName}
-                    onChange={(e) => setEditFormData({ ...editFormData, certificateName: e.target.value })}
-                    placeholder="Name printed on Certificate"
-                    required
-                    className="input-flex-admin"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', display: 'block' }}>Registered Login Name</label>
-                <input
-                  type="text"
-                  value={editFormData.registeredName}
-                  onChange={(e) => setEditFormData({ ...editFormData, registeredName: e.target.value })}
-                  placeholder="Registered Login Name"
-                  required
-                  className="input-flex-admin"
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', display: 'block' }}>Email Address</label>
-                  <input
-                    type="email"
-                    value={editFormData.email}
-                    onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
-                    placeholder="Email Address"
-                    className="input-flex-admin"
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', display: 'block' }}>Mobile Number</label>
-                  <input
-                    type="text"
-                    value={editFormData.mobile}
-                    onChange={(e) => setEditFormData({ ...editFormData, mobile: e.target.value })}
-                    placeholder="Mobile Number"
-                    className="input-flex-admin"
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', display: 'block' }}>WhatsApp Number</label>
-                  <input
-                    type="text"
-                    value={editFormData.wp}
-                    onChange={(e) => setEditFormData({ ...editFormData, wp: e.target.value })}
-                    placeholder="WhatsApp Number"
-                    className="input-flex-admin"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', display: 'block' }}>KVK / Institute Name</label>
-                <input
-                  type="text"
-                  value={editFormData.kvkName}
-                  onChange={(e) => setEditFormData({ ...editFormData, kvkName: e.target.value })}
-                  placeholder="Institute / KVK Name"
-                  required
-                  className="input-flex-admin"
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', display: 'block' }}>ATARI Zone Category</label>
-                  <select
-                    value={editFormData.atariZone}
-                    onChange={(e) => setEditFormData({ ...editFormData, atariZone: e.target.value })}
-                    className="select-filter-admin"
-                    style={{ width: '100%' }}
-                    required
-                  >
-                    <option value="">— Select ATARI Zone —</option>
-                    <optgroup label="📍 KVK by ATARI Zone">
-                      {categoryFilterOptions.kvkList.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="🏛️ Institutes & Universities">
-                      {categoryFilterOptions.instList.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </optgroup>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', display: 'block' }}>Serial Number</label>
-                  <input
-                    type="text"
-                    value={editFormData.serialNumber}
-                    onChange={(e) => setEditFormData({ ...editFormData, serialNumber: e.target.value })}
-                    placeholder="Serial Number"
-                    required
-                    className="input-flex-admin"
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-                <button type="button" className="btn-admin-outline" onClick={() => setEditingLog(null)}>Cancel</button>
-                <button type="submit" className="btn-admin-primary">💾 Save & Update Record in Turso DB</button>
-              </div>
-            </form>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* EDIT PARTICIPANT MODAL */}
-      {editingParticipant && (
-        <div className="modal-overlay-admin" onClick={() => setEditingParticipant(null)}>
-          <div className="modal-card-admin" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-flex">
-              <h3>✏️ Edit Participant Headcount Record</h3>
-              <button className="btn-close-modal" onClick={() => setEditingParticipant(null)}>✕</button>
-            </div>
-
-            <form onSubmit={handleSaveParticipantEdit} style={{ display: 'grid', gap: '14px' }}>
-              <input
-                type="text"
-                value={editParticipantData.name || ''}
-                onChange={(e) => setEditParticipantData({ ...editParticipantData, name: e.target.value })}
-                placeholder="Participant Name"
-                required
-                className="input-flex-admin"
-              />
-
-              <input
-                type="text"
-                value={editParticipantData.serialNumber || ''}
-                onChange={(e) => setEditParticipantData({ ...editParticipantData, serialNumber: e.target.value })}
-                placeholder="Serial Number"
-                required
-                className="input-flex-admin"
-              />
-
-              <input
-                type="text"
-                value={editParticipantData.instituteName || ''}
-                onChange={(e) => setEditParticipantData({ ...editParticipantData, instituteName: e.target.value })}
-                placeholder="Institute / KVK Name"
-                className="input-flex-admin"
-              />
-
-              <select
-                value={editParticipantData.atariZone || ''}
-                onChange={(e) => setEditParticipantData({ ...editParticipantData, atariZone: e.target.value })}
-                className="select-filter-admin"
-              >
-                <option value="">— Select Category / ATARI Zone —</option>
-                <optgroup label="📍 KVK by ATARI Zone">
-                  {categoryFilterOptions.kvkList.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="🏛️ Institutes & Universities">
-                  {categoryFilterOptions.instList.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </optgroup>
-              </select>
-
-              <input
-                type="text"
-                value={editParticipantData.trainingDates || ''}
-                onChange={(e) => setEditParticipantData({ ...editParticipantData, trainingDates: e.target.value })}
-                placeholder="Training Dates (Optional e.g. Oct 13-17, 2025)"
-                className="input-flex-admin"
-              />
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-                <button type="button" className="btn-admin-outline" onClick={() => setEditingParticipant(null)}>Cancel</button>
-                <button type="submit" className="btn-admin-primary">💾 Save Participant</button>
+      {
+        editingParticipant && (
+          <div className="modal-overlay-admin" onClick={() => setEditingParticipant(null)}>
+            <div className="modal-card-admin" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header-flex">
+                <h3>✏️ Edit Participant Headcount Record</h3>
+                <button className="btn-close-modal" onClick={() => setEditingParticipant(null)}>✕</button>
               </div>
-            </form>
+
+              <form onSubmit={handleSaveParticipantEdit} style={{ display: 'grid', gap: '14px' }}>
+                <input
+                  type="text"
+                  value={editParticipantData.name || ''}
+                  onChange={(e) => setEditParticipantData({ ...editParticipantData, name: e.target.value })}
+                  placeholder="Participant Name"
+                  required
+                  className="input-flex-admin"
+                />
+
+                <input
+                  type="text"
+                  value={editParticipantData.serialNumber || ''}
+                  onChange={(e) => setEditParticipantData({ ...editParticipantData, serialNumber: e.target.value })}
+                  placeholder="Serial Number"
+                  required
+                  className="input-flex-admin"
+                />
+
+                <input
+                  type="text"
+                  value={editParticipantData.instituteName || ''}
+                  onChange={(e) => setEditParticipantData({ ...editParticipantData, instituteName: e.target.value })}
+                  placeholder="Institute / KVK Name"
+                  className="input-flex-admin"
+                />
+
+                <select
+                  value={editParticipantData.atariZone || ''}
+                  onChange={(e) => setEditParticipantData({ ...editParticipantData, atariZone: e.target.value })}
+                  className="select-filter-admin"
+                >
+                  <option value="">— Select Category / ATARI Zone —</option>
+                  <optgroup label="📍 KVK by ATARI Zone">
+                    {categoryFilterOptions.kvkList.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="🏛️ Institutes & Universities">
+                    {categoryFilterOptions.instList.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </optgroup>
+                </select>
+
+                <input
+                  type="text"
+                  value={editParticipantData.trainingDates || ''}
+                  onChange={(e) => setEditParticipantData({ ...editParticipantData, trainingDates: e.target.value })}
+                  placeholder="Training Dates (Optional e.g. Oct 13-17, 2025)"
+                  className="input-flex-admin"
+                />
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                  <button type="button" className="btn-admin-outline" onClick={() => setEditingParticipant(null)}>Cancel</button>
+                  <button type="submit" className="btn-admin-primary">💾 Save Participant</button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* ZIP EXPORT PROGRESS MODAL */}
-      {zipExportModal.isOpen && (
-        <div className="modal-overlay-admin">
-          <div className="modal-card-admin" style={{ textAlign: 'center' }}>
-            <h3>{zipExportModal.title}</h3>
-            <p style={{ color: 'var(--text-tertiary)', fontSize: '14px' }}>Generating high-res certificates and creating ZIP archive...</p>
-            <div style={{ background: 'var(--border-medium)', borderRadius: '8px', height: '12px', overflow: 'hidden', margin: '20px 0 10px 0' }}>
-              <div style={{
-                width: `${zipExportModal.total > 0 ? Math.round((zipExportModal.current / zipExportModal.total) * 100) : 0}%`,
-                background: 'var(--accent-emerald)', height: '100%', transition: 'width 0.2s ease'
-              }}></div>
+      {
+        zipExportModal.isOpen && (
+          <div className="modal-overlay-admin">
+            <div className="modal-card-admin" style={{ textAlign: 'center' }}>
+              <h3>{zipExportModal.title}</h3>
+              <p style={{ color: 'var(--text-tertiary)', fontSize: '14px' }}>Generating high-res certificates and creating ZIP archive...</p>
+              <div style={{ background: 'var(--border-medium)', borderRadius: '8px', height: '12px', overflow: 'hidden', margin: '20px 0 10px 0' }}>
+                <div style={{
+                  width: `${zipExportModal.total > 0 ? Math.round((zipExportModal.current / zipExportModal.total) * 100) : 0}%`,
+                  background: 'var(--accent-emerald)', height: '100%', transition: 'width 0.2s ease'
+                }}></div>
+              </div>
+              <strong style={{ fontSize: '18px', color: 'var(--accent-emerald)' }}>
+                {zipExportModal.current} / {zipExportModal.total} ({zipExportModal.total > 0 ? Math.round((zipExportModal.current / zipExportModal.total) * 100) : 0}%)
+              </strong>
             </div>
-            <strong style={{ fontSize: '18px', color: 'var(--accent-emerald)' }}>
-              {zipExportModal.current} / {zipExportModal.total} ({zipExportModal.total > 0 ? Math.round((zipExportModal.current / zipExportModal.total) * 100) : 0}%)
-            </strong>
           </div>
-        </div>
-      )}
+        )
+      }
 
-    </div>
+    </div >
   );
 };
 

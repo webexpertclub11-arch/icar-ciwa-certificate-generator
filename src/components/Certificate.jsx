@@ -34,14 +34,24 @@ const Certificate = React.forwardRef(({ salutation = '', name, instituteName, at
       let foundZone = null;
 
       if (targetInst) {
-        const cleanInst = targetInst.toLowerCase();
-        foundInst = orgs.find(o =>
-          (o.shortName || '').trim().toLowerCase() === cleanInst ||
-          (o.fullName || '').trim().toLowerCase() === cleanInst
-        ) || orgs.find(o =>
-          (o.shortName && cleanInst.includes((o.shortName).trim().toLowerCase())) ||
-          (o.fullName && cleanInst.includes((o.fullName).trim().toLowerCase()))
-        );
+        const rawCleanInst = targetInst.toLowerCase();
+        const cleanInst = rawCleanInst.replace(/[,.-]/g, ' ').replace(/\s+/g, ' ').trim();
+
+        foundInst = orgs.find(o => {
+          const sNameRaw = (o.shortName || '').trim().toLowerCase();
+          const fNameRaw = (o.fullName || '').trim().toLowerCase();
+          const sName = sNameRaw.replace(/[,.-]/g, ' ').replace(/\s+/g, ' ').trim();
+          const fName = fNameRaw.replace(/[,.-]/g, ' ').replace(/\s+/g, ' ').trim();
+
+          return (
+            sNameRaw === rawCleanInst || fNameRaw === rawCleanInst ||
+            sName === cleanInst || fName === cleanInst ||
+            (sName && cleanInst.includes(sName)) ||
+            (fName && cleanInst.includes(fName)) ||
+            (sNameRaw && rawCleanInst.includes(sNameRaw)) ||
+            (fNameRaw && rawCleanInst.includes(fNameRaw))
+          );
+        });
       }
 
       if (targetZone) {
@@ -52,6 +62,12 @@ const Certificate = React.forwardRef(({ salutation = '', name, instituteName, at
             (o.fullName || '').toLowerCase().includes(zoneStr) ||
             (o.shortName || '').toLowerCase().includes(zoneStr)
           );
+        } else if ((explicitCat || foundInst?.category || '').toUpperCase().includes('KVK') && foundInst) {
+          const inferredZoneMatch = (foundInst.category || '').match(/Zone\s+([IVX0-9]+)/i);
+          if (inferredZoneMatch) {
+            const infZoneStr = `Zone ${inferredZoneMatch[1]}`.toLowerCase();
+            foundZone = orgs.find(o => (o.fullName || '').toLowerCase().includes(infZoneStr));
+          }
         }
       }
 
@@ -66,8 +82,23 @@ const Certificate = React.forwardRef(({ salutation = '', name, instituteName, at
           setResolvedInstituteName(targetInst);
           setResolvedZone(activeCat.includes('CAU') ? 'Central Agricultural University' : 'State Agricultural University');
         }
+        // } else {
+        //   if (foundZone && foundZone.fullName) {
+        //     setResolvedZone(foundZone.fullName);
+        //   } else if (targetZone) {
+        //     setResolvedZone(targetZone);
+        //   }
+
+        //   if (foundInst && (foundInst.shortName || foundInst.fullName)) {
+        //     setResolvedInstituteName(foundInst.shortName || foundInst.fullName);
+        //   } else if (targetInst) {
+        //     setResolvedInstituteName(targetInst);
+        //   }
+        // }
       } else {
-        if (foundZone && foundZone.fullName) {
+        if (activeCat.includes('KVK') && foundInst && foundInst.fullName) {
+          setResolvedZone(foundInst.fullName);
+        } else if (foundZone && foundZone.fullName) {
           setResolvedZone(foundZone.fullName);
         } else if (targetZone) {
           setResolvedZone(targetZone);

@@ -52,8 +52,15 @@
   text-align: left;
 }
 
-.lock-notice-banner { background: #fffbeb; border: 1px solid #fde68a; }
-.closed-notice-banner { background: #fef2f2; border: 1px solid #fecaca; }
+.lock-notice-banner {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+}
+
+.closed-notice-banner {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
 
 .lock-banner-header {
   display: flex;
@@ -62,7 +69,9 @@
   margin-bottom: 2px;
 }
 
-.lock-icon { font-size: 14px; }
+.lock-icon {
+  font-size: 14px;
+}
 
 .lock-title {
   font-weight: 800;
@@ -72,7 +81,9 @@
   letter-spacing: 0.5px;
 }
 
-.closed-notice-banner .lock-title { color: #dc2626; }
+.closed-notice-banner .lock-title {
+  color: #dc2626;
+}
 
 .lock-desc {
   font-size: 11.5px;
@@ -81,7 +92,9 @@
   margin: 0;
 }
 
-.closed-notice-banner .lock-desc { color: #991b1b; }
+.closed-notice-banner .lock-desc {
+  color: #991b1b;
+}
 
 .lock-timestamp {
   display: block;
@@ -144,8 +157,13 @@
   box-shadow: 0 2px 6px rgba(5, 150, 105, 0.3);
 }
 
-.completed-step { color: #059669; }
-.completed-step .step-num { background: #059669; }
+.completed-step {
+  color: #059669;
+}
+
+.completed-step .step-num {
+  background: #059669;
+}
 
 .step-connector {
   flex: 1;
@@ -267,8 +285,15 @@
   font-size: 12.5px;
 }
 
-.summary-field .lbl { color: #047857; font-weight: 600; }
-.summary-field .val { color: #064e3b; font-weight: 800; }
+.summary-field .lbl {
+  color: #047857;
+  font-weight: 600;
+}
+
+.summary-field .val {
+  color: #064e3b;
+  font-weight: 800;
+}
 
 .lock-warning-text {
   font-size: 11px;
@@ -291,7 +316,10 @@
   gap: 10px;
 }
 
-.summary-status-header { display: flex; justify-content: center; }
+.summary-status-header {
+  display: flex;
+  justify-content: center;
+}
 
 .gold-seal-badge {
   background: #fef08a;
@@ -380,7 +408,9 @@
   border-color: #cbd5e1 !important;
 }
 
-.width-100 { width: 100%; }
+.width-100 {
+  width: 100%;
+}
 
 .form-footer {
   padding: 10px 20px;
@@ -389,5 +419,25 @@
   background: #ecfdf5;
 }
 
-.footer-title { font-size: 10.5px; color: #047857; margin: 0; font-weight: 600; }
-.footer-sub { font-size: 10px; color: #065f46; margin-top: 1px; font-weight: 800; }
+.footer-title {
+  font-size: 10.5px;
+  color: #047857;
+  margin: 0;
+  font-weight: 600;
+}
+
+.footer-sub {
+  font-size: 10px;
+  color: #065f46;
+  margin-top: 1px;
+  font-weight: 800;
+}
+
+/* Responsive Mobile Layout */
+@media (max-width: 500px) {
+  .crextio-form-card {
+    width: calc(100% - 32px);
+    margin: 16px;
+    height: calc(100vh - 32px);
+  }
+}
