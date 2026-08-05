@@ -142,8 +142,9 @@ function App() {
     if (lockRecord) {
       const orgData = getFullNameAndCategory(lockRecord.kvkName || '');
       const zoneData = getFullNameAndCategory(lockRecord.atariZone || '');
-      setSalutation(lockRecord.salutation || '');
-      setParticipantName(lockRecord.certificateName || pName);
+      setSalutation(''); // Clear legacy separated salutation
+      const legacySal = lockRecord.salutation ? lockRecord.salutation.trim() + ' ' : '';
+      setParticipantName(legacySal + (lockRecord.certificateName || pName));
       setInstituteName(orgData.fullName);
       setParticipantCategory(orgData.category || participant.category || '');
       setSelectedZone(orgData.officialFullName || zoneData.fullName || lockRecord.atariZone || '');
@@ -355,8 +356,9 @@ function App() {
 
   const handleInspectCertificateFromAdmin = async (logItem) => {
     setRegisteredName(logItem.registeredName || '');
-    setParticipantName(logItem.certificateName || logItem.registeredName || '');
-    setSalutation(logItem.salutation || '');
+    const legacySal = logItem.salutation ? logItem.salutation.trim() + ' ' : '';
+    setParticipantName(legacySal + (logItem.certificateName || logItem.registeredName || ''));
+    setSalutation('');
 
     const orgs = await fetchOrganizationsList();
     const getFullNameAndCategory = (short) => {
