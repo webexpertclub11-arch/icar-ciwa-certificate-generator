@@ -153,7 +153,22 @@ const CertificateForm = ({
                 <div className="form-group">
                   <label htmlFor="name-combobox-input">Participant Name</label>
                   <div className="name-input-row">
-                    {/* Salutation selection is removed per request; users can type it individually inside their Name */}
+                    <div className="select-wrapper salutation-select-wrapper">
+                      <select
+                        id="salutation-select"
+                        value={salutation}
+                        onChange={(e) => setSalutation(e.target.value)}
+                        disabled={!windowStatus.isActive}
+                        title="Select Salutation"
+                      >
+                        <option value="">Salutation</option>
+                        {salutations.map((sal, index) => (
+                          <option key={index} value={sal}>
+                            {sal}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
                     <div className="searchable-combobox-wrapper">
                       <input

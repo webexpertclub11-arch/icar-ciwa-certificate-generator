@@ -142,9 +142,8 @@ function App() {
     if (lockRecord) {
       const orgData = getFullNameAndCategory(lockRecord.kvkName || '');
       const zoneData = getFullNameAndCategory(lockRecord.atariZone || '');
-      setSalutation(''); // Clear legacy separated salutation
-      const legacySal = lockRecord.salutation ? lockRecord.salutation.trim() + ' ' : '';
-      setParticipantName(legacySal + (lockRecord.certificateName || pName));
+      setSalutation(lockRecord.salutation || '');
+      setParticipantName(lockRecord.certificateName || pName);
       setInstituteName(orgData.fullName);
       setParticipantCategory(orgData.category || participant.category || '');
       setSelectedZone(orgData.officialFullName || zoneData.fullName || lockRecord.atariZone || '');
@@ -161,6 +160,7 @@ function App() {
     } else {
       const orgData = getFullNameAndCategory(participant.instituteName || '');
       const zoneData = getFullNameAndCategory(participant.atariZone || '');
+      setSalutation(''); // Fix: Clear salutation for new users
       setParticipantName(pName);
       if (participant.instituteName) {
         setInstituteName(orgData.fullName);
@@ -286,6 +286,7 @@ function App() {
     setIsLoggedIn(false);
     setRegisteredName('');
     setParticipantName('');
+    setSalutation(''); // Fix: Clear previous user's salutation
     setIsLocked(false);
     setFormStep('edit');
     setIsAdminRestricted(false);
@@ -356,9 +357,8 @@ function App() {
 
   const handleInspectCertificateFromAdmin = async (logItem) => {
     setRegisteredName(logItem.registeredName || '');
-    const legacySal = logItem.salutation ? logItem.salutation.trim() + ' ' : '';
-    setParticipantName(legacySal + (logItem.certificateName || logItem.registeredName || ''));
-    setSalutation('');
+    setParticipantName(logItem.certificateName || logItem.registeredName || '');
+    setSalutation(logItem.salutation || '');
 
     const orgs = await fetchOrganizationsList();
     const getFullNameAndCategory = (short) => {
