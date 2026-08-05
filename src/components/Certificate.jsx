@@ -45,7 +45,7 @@ const Certificate = React.forwardRef(({ salutation = '', name, instituteName, at
           }
         }
 
-        const zoneToSearch = inferredZone || targetZone;
+        const zoneToSearch = targetZone || inferredZone;
         if (zoneToSearch) {
           const zoneMatch = zoneToSearch.match(/Zone\s+([IVX0-9]+)/i);
           if (zoneMatch) {
