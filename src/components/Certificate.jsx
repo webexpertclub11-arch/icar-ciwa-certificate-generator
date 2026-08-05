@@ -11,21 +11,69 @@ const Certificate = React.forwardRef(({ salutation = '', name, instituteName, at
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const settings = customSettings || getCertificateSettings();
 
-  const displayZone = atariZone || 'ICAR-Agricultural Technology Application Research Institute, Zone I, Ludhiana';
   const validSerial = serialNumber || 'CIWA/2026/NOGRA/166';
 
   // Dynamic hierarchical training dates statement (Participant-wise > Zone-wise > Global default)
-  const displayTrainingDates = trainingDates || getEffectiveTrainingDates(validSerial, displayZone, customSettings?.trainingDates);
+  const displayTrainingDates = trainingDates || getEffectiveTrainingDates(validSerial, resolvedZoneFullName || atariZone || 'ICAR', customSettings?.trainingDates);
 
   const activeCategory = (category || atariZone || '').trim().toUpperCase();
   const instUpper = (instituteName || '').trim().toUpperCase();
+
+  // Safe Dynamic Resolution ONLY for the ATARI Zone fullname string
+  const [resolvedZoneFullName, setResolvedZoneFullName] = useState('');
+
+  useEffect(() => {
+    import('../utils/dbTracker').then(({ fetchOrganizationsList }) => {
+      fetchOrganizationsList().then(orgs => {
+        if (!orgs || orgs.length === 0) return;
+
+        const targetInst = (instituteName || '').trim().toLowerCase();
+        const targetZone = (atariZone || '').trim();
+
+        let inferredZone = null;
+
+        if (targetInst) {
+          const cleanInst = targetInst.replace(/[,.-]/g, ' ').replace(/\s+/g, ' ').trim();
+          const foundKVK = orgs.find(o => {
+            const sNameRaw = (o.shortName || '').trim().toLowerCase();
+            const fNameRaw = (o.fullName || '').trim().toLowerCase();
+            return (sNameRaw === targetInst || fNameRaw === targetInst || sNameRaw.replace(/[,.-]/g, ' ') === cleanInst);
+          });
+
+          if (foundKVK && foundKVK.category) {
+            inferredZone = foundKVK.category;
+          }
+        }
+
+        const zoneToSearch = inferredZone || targetZone;
+        if (zoneToSearch) {
+          const zoneMatch = zoneToSearch.match(/Zone\s+([IVX0-9]+)/i);
+          if (zoneMatch) {
+            const romanNumeral = zoneMatch[1].toUpperCase();
+            const foundATARI = orgs.find(o =>
+              (o.fullName || '').toUpperCase().includes(`ZONE ${romanNumeral}`) ||
+              (o.shortName || '').toUpperCase().includes(`ZONE ${romanNumeral}`)
+            );
+
+            if (foundATARI && foundATARI.fullName) {
+              setResolvedZoneFullName(foundATARI.fullName);
+              return;
+            }
+          }
+        }
+
+        setResolvedZoneFullName('');
+      });
+    });
+  }, [instituteName, atariZone]);
+
+  const displayZone = resolvedZoneFullName || atariZone || 'ICAR-Agricultural Technology Application Research Institute, Zone I, Ludhiana';
   const zoneUpper = (displayZone || '').trim().toUpperCase();
 
   // Category Layout Format Flags
   const isKvk = activeCategory.startsWith('KVK') || activeCategory.includes('ATARI') || instUpper.includes('KVK') || zoneUpper.includes('ATARI');
   const isSauOrCau = activeCategory.includes('SAU') || activeCategory.includes('CAU');
 
-  // ICAR Institute is strictly true ONLY if category is ICAR Institute and NOT KVK / ATARI / SAU / CAU
   const isIcarInstitute = !isKvk && !isSauOrCau && (
     activeCategory.includes('ICAR INSTITUTE') ||
     activeCategory === 'ICAR' ||

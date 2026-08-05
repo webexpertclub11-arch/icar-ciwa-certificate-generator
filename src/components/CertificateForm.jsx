@@ -187,7 +187,7 @@ const CertificateForm = ({
                 {/* Institute / KVK Name Field */}
                 <div className="form-group mt-12">
                   <label htmlFor="institute-input">
-                    KVK / Institute Name
+                    KVK / Institute Name (Short Name)
                   </label>
                   <input
                     type="text"
@@ -195,7 +195,7 @@ const CertificateForm = ({
                     value={instituteName}
                     onChange={(e) => setInstituteName(e.target.value)}
                     disabled={!windowStatus.isActive}
-                    placeholder="Enter your KVK / Institute Name..."
+                    placeholder="e.g. KVK, Satna"
                   />
                 </div>
               </div>
