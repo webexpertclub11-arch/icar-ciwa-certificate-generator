@@ -187,17 +187,15 @@ const CertificateForm = ({
                 {/* Institute / KVK Name Field */}
                 <div className="form-group mt-12">
                   <label htmlFor="institute-input">
-                    KVK / Institute Name 🔒 <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 'normal' }}>(Assigned by Admin)</span>
+                    KVK / Institute Name
                   </label>
                   <input
                     type="text"
                     id="institute-input"
                     value={instituteName}
-                    readOnly
-                    disabled
-                    placeholder="KVK / Institute Name"
-                    style={{ background: '#f8fafc', cursor: 'not-allowed', opacity: 0.85 }}
-                    title="KVK / Institute Name is registered by Admin and cannot be updated"
+                    onChange={(e) => setInstituteName(e.target.value)}
+                    disabled={!windowStatus.isActive}
+                    placeholder="Enter your KVK / Institute Name..."
                   />
                 </div>
               </div>
