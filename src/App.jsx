@@ -144,9 +144,9 @@ function App() {
       const zoneData = getFullNameAndCategory(lockRecord.atariZone || '');
       setSalutation(lockRecord.salutation || '');
       setParticipantName(lockRecord.certificateName || pName);
-      setInstituteName(orgData.fullName);
+      setInstituteName(lockRecord.kvkName || orgData.fullName || '');
       setParticipantCategory(orgData.category || participant.category || '');
-      setSelectedZone(orgData.officialFullName || zoneData.fullName || lockRecord.atariZone || '');
+      setSelectedZone(lockRecord.atariZone || orgData.officialFullName || zoneData.fullName || '');
       setDownloadTime(lockRecord.downloadTime);
 
       if (lockRecord.isLocked) {
@@ -163,14 +163,14 @@ function App() {
       setSalutation(''); // Fix: Clear salutation for new users
       setParticipantName(pName);
       if (participant.instituteName) {
-        setInstituteName(orgData.fullName);
+        setInstituteName(participant.instituteName || orgData.fullName || '');
         setParticipantCategory(orgData.category || participant.category || '');
       }
       const activeCat = (orgData.category || participant.category || '').toUpperCase();
       if (activeCat.includes('CAU') || activeCat.includes('SAU')) {
-        setSelectedZone(orgData.officialFullName || (activeCat.includes('CAU') ? 'Central Agricultural University' : 'State Agricultural University'));
+        setSelectedZone(participant.atariZone || orgData.officialFullName || (activeCat.includes('CAU') ? 'Central Agricultural University' : 'State Agricultural University'));
       } else if (participant.atariZone) {
-        setSelectedZone(zoneData.officialFullName || zoneData.fullName || participant.atariZone);
+        setSelectedZone(participant.atariZone || zoneData.officialFullName || zoneData.fullName);
       }
       setIsLocked(false);
       setDownloadTime(null);
@@ -373,9 +373,9 @@ function App() {
 
     const orgData = getFullNameAndCategory(logItem.kvkName || '');
     const zoneData = getFullNameAndCategory(logItem.atariZone || '');
-    setInstituteName(orgData.fullName);
+    setInstituteName(logItem.kvkName || orgData.fullName || '');
     setParticipantCategory(orgData.category || '');
-    setSelectedZone(zoneData.fullName || logItem.atariZone || '');
+    setSelectedZone(logItem.atariZone || zoneData.fullName || '');
     setAssignedSerialNumber(logItem.serialNumber || '');
     setIsLocked(true);
     setDownloadTime(logItem.downloadTime);

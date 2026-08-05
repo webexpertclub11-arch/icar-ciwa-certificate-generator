@@ -5,130 +5,20 @@ import leftSideLogo from '../assets/international_womenfarmer.svg';
 import icarRightLogo from '../assets/icarlogoright.gif';
 import certificateHead from '../assets/certificate head.png';
 import { getCertificateSettings, getEffectiveTrainingDates } from '../utils/certificateSettings';
-import { fetchOrganizationsList } from '../utils/dbTracker';
+
 
 const Certificate = React.forwardRef(({ salutation = '', name, instituteName, atariZone, serialNumber, trainingDates, customSettings, category }, ref) => {
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const settings = customSettings || getCertificateSettings();
 
-  const [resolvedZone, setResolvedZone] = useState(atariZone);
-  const [resolvedCategory, setResolvedCategory] = useState(category);
-  const [resolvedInstituteName, setResolvedInstituteName] = useState(instituteName || '');
-
-  useEffect(() => {
-    setResolvedInstituteName(instituteName || '');
-  }, [instituteName]);
-
-  // Dynamic Zone / University Full Name & SAU/CAU Short Name Resolution from DB
-  useEffect(() => {
-    fetchOrganizationsList().then(orgs => {
-      if (!orgs || orgs.length === 0) return;
-
-      const targetZone = (atariZone || '').trim();
-      const targetInst = (instituteName || '').trim();
-      const explicitCat = (category || '').trim();
-
-      if (!targetZone && !targetInst && !explicitCat) return;
-
-      let foundInst = null;
-      let foundZone = null;
-
-      if (targetInst) {
-        const rawCleanInst = targetInst.toLowerCase();
-        const cleanInst = rawCleanInst.replace(/[,.-]/g, ' ').replace(/\s+/g, ' ').trim();
-
-        foundInst = orgs.find(o => {
-          const sNameRaw = (o.shortName || '').trim().toLowerCase();
-          const fNameRaw = (o.fullName || '').trim().toLowerCase();
-          const sName = sNameRaw.replace(/[,.-]/g, ' ').replace(/\s+/g, ' ').trim();
-          const fName = fNameRaw.replace(/[,.-]/g, ' ').replace(/\s+/g, ' ').trim();
-
-          return (
-            sNameRaw === rawCleanInst || fNameRaw === rawCleanInst ||
-            sName === cleanInst || fName === cleanInst ||
-            (sName && cleanInst.includes(sName)) ||
-            (fName && cleanInst.includes(fName)) ||
-            (sNameRaw && rawCleanInst.includes(sNameRaw)) ||
-            (fNameRaw && rawCleanInst.includes(fNameRaw))
-          );
-        });
-      }
-
-      if (targetZone) {
-        const zoneMatch = targetZone.match(/Zone\s+([IVX0-9]+)/i);
-        if (zoneMatch) {
-          const zoneStr = `Zone ${zoneMatch[1]}`.toLowerCase();
-          foundZone = orgs.find(o =>
-            (o.fullName || '').toLowerCase().includes(zoneStr) ||
-            (o.shortName || '').toLowerCase().includes(zoneStr)
-          );
-        } else if ((explicitCat || foundInst?.category || '').toUpperCase().includes('KVK') && foundInst) {
-          const inferredZoneMatch = (foundInst.category || '').match(/Zone\s+([IVX0-9]+)/i);
-          if (inferredZoneMatch) {
-            const infZoneStr = `Zone ${inferredZoneMatch[1]}`.toLowerCase();
-            foundZone = orgs.find(o => (o.fullName || '').toLowerCase().includes(infZoneStr));
-          }
-        }
-      }
-
-      const activeCat = (explicitCat || foundInst?.category || foundZone?.category || '').toUpperCase();
-      const isSauOrCau = activeCat.includes('SAU') || activeCat.includes('CAU');
-
-      if (isSauOrCau) {
-        if (foundInst) {
-          setResolvedInstituteName(foundInst.shortName || foundInst.fullName || targetInst);
-          setResolvedZone(foundInst.fullName || (activeCat.includes('CAU') ? 'Central Agricultural University' : 'State Agricultural University'));
-        } else {
-          setResolvedInstituteName(targetInst);
-          setResolvedZone(activeCat.includes('CAU') ? 'Central Agricultural University' : 'State Agricultural University');
-        }
-        // } else {
-        //   if (foundZone && foundZone.fullName) {
-        //     setResolvedZone(foundZone.fullName);
-        //   } else if (targetZone) {
-        //     setResolvedZone(targetZone);
-        //   }
-
-        //   if (foundInst && (foundInst.shortName || foundInst.fullName)) {
-        //     setResolvedInstituteName(foundInst.shortName || foundInst.fullName);
-        //   } else if (targetInst) {
-        //     setResolvedInstituteName(targetInst);
-        //   }
-        // }
-      } else {
-        if (activeCat.includes('KVK') && foundInst && foundInst.fullName) {
-          setResolvedZone(foundInst.fullName);
-        } else if (foundZone && foundZone.fullName) {
-          setResolvedZone(foundZone.fullName);
-        } else if (targetZone) {
-          setResolvedZone(targetZone);
-        }
-
-        if (foundInst && (foundInst.shortName || foundInst.fullName)) {
-          setResolvedInstituteName(foundInst.shortName || foundInst.fullName);
-        } else if (targetInst) {
-          setResolvedInstituteName(targetInst);
-        }
-      }
-
-      if (explicitCat) {
-        setResolvedCategory(explicitCat);
-      } else if (foundInst && foundInst.category) {
-        setResolvedCategory(foundInst.category);
-      } else if (foundZone && foundZone.category) {
-        setResolvedCategory(foundZone.category);
-      }
-    });
-  }, [atariZone, instituteName, category]);
-
-  const displayZone = resolvedZone || atariZone || 'ICAR-Agricultural Technology Application Research Institute, Zone I, Ludhiana';
+  const displayZone = atariZone || 'ICAR-Agricultural Technology Application Research Institute, Zone I, Ludhiana';
   const validSerial = serialNumber || 'CIWA/2026/NOGRA/166';
 
   // Dynamic hierarchical training dates statement (Participant-wise > Zone-wise > Global default)
   const displayTrainingDates = trainingDates || getEffectiveTrainingDates(validSerial, displayZone, customSettings?.trainingDates);
 
-  const activeCategory = (resolvedCategory || category || atariZone || '').trim().toUpperCase();
-  const instUpper = (instituteName || resolvedInstituteName || '').trim().toUpperCase();
+  const activeCategory = (category || atariZone || '').trim().toUpperCase();
+  const instUpper = (instituteName || '').trim().toUpperCase();
   const zoneUpper = (displayZone || '').trim().toUpperCase();
 
   // Category Layout Format Flags
@@ -142,7 +32,7 @@ const Certificate = React.forwardRef(({ salutation = '', name, instituteName, at
     (instUpper.includes('ICAR') && !instUpper.includes('AGRICULTURAL TECHNOLOGY') && !instUpper.includes('KVK'))
   );
 
-  const finalInstituteName = resolvedInstituteName || instituteName;
+  const finalInstituteName = instituteName;
 
   // Combine Salutation, Name and Institute Name dynamically
   const activeSalutation = salutation ? `${salutation} ` : '';
