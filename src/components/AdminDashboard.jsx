@@ -138,7 +138,7 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
 
   // Headcount Pagination State
   const [participantCurrentPage, setParticipantCurrentPage] = useState(1);
-  const [participantItemsPerPage, setParticipantItemsPerPage] = useState(10);
+  const [participantItemsPerPage, setParticipantItemsPerPage] = useState(50);
 
   // ZIP Export Modal State
   const [zipExportModal, setZipExportModal] = useState({

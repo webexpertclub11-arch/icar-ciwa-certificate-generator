@@ -41,6 +41,24 @@ export default async function handler(req, res) {
             return res.status(200).json({ rows: [] });
         }
 
+        if (sql === 'BULK_INSERT_PARTICIPANTS_MONGO') {
+            const bulkOps = args.map(item => ({
+                updateOne: {
+                    filter: { serial_number: item.serialNumber },
+                    update: {
+                        $set: {
+                            participant_id: String(item.id), name: item.name, serial_number: item.serialNumber,
+                            institute_name: item.instituteName, atari_zone: item.atariZone, training_dates: item.trainingDates,
+                            created_at: item.createdAt, id: String(item.id)
+                        }
+                    },
+                    upsert: true
+                }
+            }));
+            await db.collection('participants').bulkWrite(bulkOps);
+            return res.status(200).json({ rows: [] });
+        }
+
         if (sql.includes("SELECT * FROM PARTICIPANTS ORDER BY NAME ASC")) {
             const rows = await db.collection('participants').find().sort({ name: 1 }).toArray();
             return res.status(200).json({ rows });

@@ -861,29 +861,25 @@ export const bulkRegisterParticipants = (rawArray) => {
         console.error("Error saving bulk participants:", e);
     }
 
-    // Also persist to Turso DB participants table asynchronously
+    // Also persist to MongoDB efficiently using a bulk query command
     const db = getDb();
     if (db && newlyAdded.length > 0) {
         (async () => {
-            for (const item of newlyAdded) {
-                try {
-                    await db.execute({
-                        sql: `INSERT INTO participants (participant_id, name, serial_number, institute_name, atari_zone, training_dates, created_at)
-                              VALUES (?, ?, ?, ?, ?, ?, ?)
-                              ON CONFLICT(serial_number) DO NOTHING`,
-                        args: [
-                            item.id,
-                            item.name,
-                            item.serialNumber,
-                            item.instituteName,
-                            item.category || item.atariZone || '',
-                            item.trainingDates,
-                            getIndianStandardTime()
-                        ]
-                    });
-                } catch (dbErr) {
-                    console.warn("DB insert participant warning:", dbErr);
-                }
+            try {
+                await db.execute({
+                    sql: `BULK_INSERT_PARTICIPANTS_MONGO`,
+                    args: newlyAdded.map(item => ({
+                        id: item.id,
+                        name: item.name,
+                        serialNumber: item.serialNumber,
+                        instituteName: item.instituteName,
+                        atariZone: item.category || item.atariZone || '',
+                        trainingDates: item.trainingDates,
+                        createdAt: getIndianStandardTime()
+                    }))
+                });
+            } catch (dbErr) {
+                console.warn("Bulk DB insert participant warning:", dbErr);
             }
         })();
     }
