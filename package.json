@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host",
+    "dev": "concurrently \"vite --host\" \"node server.js\"",
+    "start": "node server.js",
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview"
@@ -12,12 +13,17 @@
   "dependencies": {
     "@emailjs/browser": "^4.4.1",
     "@libsql/client": "^0.17.4",
+    "concurrently": "^10.0.4",
     "core-js": "^3.49.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
     "exceljs": "^4.4.0",
+    "express": "^5.2.1",
     "fast-png": "^8.0.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "jszip": "^3.10.1",
+    "mongodb": "^7.5.0",
     "postcss": "^8.5.24",
     "qrcode": "^1.5.4",
     "react": "18.3.1",

@@ -1,4 +1,3 @@
-import { createClient } from "@libsql/client";
 import * as XLSX from 'xlsx';
 import { sampleParticipants } from '../data/certificateData';
 
@@ -13,23 +12,23 @@ export const getIndianStandardTime = () => {
     return istTime.toISOString();
 };
 
-// Get Turso Database client using Vite environment variables
+// Get Backend SQL-to-Mongo Proxy Database client
 const getDb = () => {
-    const url = import.meta.env.VITE_TURSO_DB_URL;
-    const authToken = import.meta.env.VITE_TURSO_AUTH_TOKEN;
-
-    if (!url) {
-        console.warn("Turso DB credentials missing in .env: Please set VITE_TURSO_DB_URL and VITE_TURSO_AUTH_TOKEN");
-        return null;
-    }
-
     try {
-        return createClient({
-            url,
-            authToken,
-        });
+        return {
+            execute: async (queryOrObj) => {
+                const sql = typeof queryOrObj === 'string' ? queryOrObj : queryOrObj.sql;
+                const args = typeof queryOrObj === 'string' ? [] : (queryOrObj.args || []);
+                const res = await fetch('/api/sql', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sql, args })
+                });
+                return await res.json();
+            }
+        };
     } catch (e) {
-        console.error("Error creating Turso DB client:", e);
+        console.error("Error creating Mongo backend client proxy:", e);
         return null;
     }
 };
