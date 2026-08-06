@@ -49,13 +49,15 @@ const LoginPage = ({ onLogin, onAdminExport }) => {
     }, []);
 
 
+    const normalizeString = (str) => (str || '').replace(/[^a-z0-9]/gi, '').toLowerCase();
 
     // Filter participants for dropdown
-    const filteredParticipants = (participantsList || []).filter(p =>
-        p && p.name && typeof p.name === 'string' &&
-        p.name.toLowerCase().includes((searchName || '').toLowerCase())
-    );
-
+    const filteredParticipants = (participantsList || []).filter(p => {
+        if (!p || !p.name || typeof p.name !== 'string') return false;
+        const normalizedSearch = normalizeString(searchName);
+        if (!normalizedSearch) return true; // Show all if search is effectively empty
+        return normalizeString(p.name).includes(normalizedSearch);
+    });
 
     const handleRoleSwitch = (role) => {
         setActiveRole(role);
@@ -73,11 +75,12 @@ const LoginPage = ({ onLogin, onAdminExport }) => {
         const value = e.target.value;
         setSearchName(value);
         setIsDropdownOpen(true);
-        const participant = (participantsList || []).find(p =>
-            p && p.name && typeof p.name === 'string' &&
-            p.name.toLowerCase() === value.toLowerCase()
-        );
-        if (participant) {
+        const normalizedValue = normalizeString(value);
+        const participant = (participantsList || []).find(p => {
+            if (!p || !p.name || typeof p.name !== 'string') return false;
+            return normalizeString(p.name) === normalizedValue;
+        });
+        if (participant && normalizedValue !== '') {
             setSelectedId(participant.id);
         } else {
             setSelectedId('');
