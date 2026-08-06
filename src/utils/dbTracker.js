@@ -507,6 +507,47 @@ export const updateParticipantRecord = (id, updatedData) => {
  * Check if a certificate has already been downloaded and locked.
  */
 export const checkCertificateLockStatus = async (serialNumber, registeredName) => {
+    // 1. Check DB First for Real-time Truth
+    const db = getDb();
+    if (db) {
+        try {
+            const result = await db.execute({
+                sql: `SELECT * FROM certificate_downloads WHERE serial_number = ? OR registered_name = ? ORDER BY download_time DESC LIMIT 1`,
+                args: [serialNumber || '', registeredName || '']
+            });
+
+            if (result.rows && result.rows.length > 0) {
+                const row = result.rows[0];
+                const dbRecord = {
+                    registeredName: row.registered_name,
+                    certificateName: row.certificate_name,
+                    salutation: row.salutation || '',
+                    kvkName: row.kvk_name,
+                    atariZone: row.atari_zone,
+                    serialNumber: row.serial_number,
+                    email: row.email,
+                    mobile: row.mobile,
+                    wp: row.wp_no,
+                    isLocked: row.is_locked === 1 || row.is_locked === '1' || row.is_locked === true,
+                    downloadTime: row.download_time
+                };
+
+                // Sync latest DB data back to LocalStorage caching
+                try {
+                    localStorage.setItem(`icar_cert_lock_${dbRecord.serialNumber}`, JSON.stringify(dbRecord));
+                    if (dbRecord.registeredName) {
+                        localStorage.setItem(`icar_cert_lock_user_${dbRecord.registeredName.toLowerCase()}`, JSON.stringify(dbRecord));
+                    }
+                } catch (e) { }
+
+                return dbRecord;
+            }
+        } catch (err) {
+            console.error("Error checking lock status in DB:", err);
+        }
+    }
+
+    // 2. Fallback to LocalStorage
     try {
         const localDataBySerial = localStorage.getItem(`icar_cert_lock_${serialNumber}`);
         if (localDataBySerial) {
@@ -521,35 +562,6 @@ export const checkCertificateLockStatus = async (serialNumber, registeredName) =
         }
     } catch (e) {
         console.warn("LocalStorage lock check error:", e);
-    }
-
-    const db = getDb();
-    if (!db) return null;
-
-    try {
-        const result = await db.execute({
-            sql: `SELECT * FROM certificate_downloads WHERE serial_number = ? OR registered_name = ? ORDER BY download_time DESC LIMIT 1`,
-            args: [serialNumber || '', registeredName || '']
-        });
-
-        if (result.rows && result.rows.length > 0) {
-            const row = result.rows[0];
-            return {
-                registeredName: row.registered_name,
-                certificateName: row.certificate_name,
-                salutation: row.salutation || '',
-                kvkName: row.kvk_name,
-                atariZone: row.atari_zone,
-                serialNumber: row.serial_number,
-                email: row.email,
-                mobile: row.mobile,
-                wp: row.wp_no,
-                isLocked: row.is_locked === 1 || row.is_locked === '1' || row.is_locked === true,
-                downloadTime: row.download_time
-            };
-        }
-    } catch (err) {
-        console.error("Error checking lock status in DB:", err);
     }
 
     return null;

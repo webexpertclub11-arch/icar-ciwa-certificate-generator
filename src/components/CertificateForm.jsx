@@ -23,16 +23,25 @@ const CertificateForm = ({
   registeredName = ''
 }) => {
   const [atariZones, setAtariZones] = useState([]);
+  const [otherZones, setOtherZones] = useState([]);
   const [settingsVersion, setSettingsVersion] = useState(0);
 
   useEffect(() => {
     fetchOrganizationsList().then(orgs => {
       const validOrgs = Array.isArray(orgs) ? orgs : [];
+
       const kvkCategories = Array.from(new Set(
         validOrgs
           .filter(o => o && o.category && typeof o.category === 'string' && o.category.startsWith('KVK'))
           .map(o => o.category)
       ));
+
+      const nonKvkCategories = Array.from(new Set(
+        validOrgs
+          .filter(o => o && o.category && typeof o.category === 'string' && !o.category.startsWith('KVK'))
+          .map(o => o.category)
+      ));
+
       if (kvkCategories.length > 0) {
         setAtariZones(kvkCategories.map((cat, idx) => ({ id: idx + 1, name: cat, shortName: cat })));
       } else {
@@ -51,6 +60,8 @@ const CertificateForm = ({
         ];
         setAtariZones(defaults.map((cat, idx) => ({ id: idx + 1, name: cat, shortName: cat })));
       }
+
+      setOtherZones(nonKvkCategories.map((cat, idx) => ({ id: idx + 1, name: cat, shortName: cat })));
     });
 
     const handleSettingsUpdate = () => {
@@ -197,6 +208,42 @@ const CertificateForm = ({
                     disabled={!windowStatus.isActive}
                     placeholder="e.g. KVK, Satna"
                   />
+                </div>
+
+                {/* ATARI Category Dropdown Field */}
+                <div className="form-group mt-12">
+                  <label htmlFor="zone-select">
+                    Choose your institute category
+                  </label>
+                  <div className="select-wrapper">
+                    <select
+                      id="zone-select"
+                      value={selectedZone}
+                      onChange={(e) => setSelectedZone(e.target.value)}
+                      disabled={!windowStatus.isActive}
+                      className="combobox-input"
+                    >
+                      {atariZones.map((zone) => (
+                        <option key={zone.id || zone.name} value={zone.name}>
+                          {zone.name}
+                        </option>
+                      ))}
+                      {otherZones.length > 0 && (
+                        <optgroup label="🏛️ Institutes & Universities (ICAR / SAU / CAU)">
+                          {otherZones.map((zone) => {
+                            let displayLabel = zone.name;
+                            if (zone.name === 'State Agricultural University') displayLabel = 'SAU';
+                            if (zone.name === 'Central Agricultural University') displayLabel = 'CAU';
+                            return (
+                              <option key={zone.id || zone.name} value={zone.name}>
+                                {displayLabel}
+                              </option>
+                            );
+                          })}
+                        </optgroup>
+                      )}
+                    </select>
+                  </div>
                 </div>
               </div>
             ) : (

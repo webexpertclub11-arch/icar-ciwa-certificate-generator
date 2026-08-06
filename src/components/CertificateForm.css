@@ -434,10 +434,15 @@
 }
 
 /* Responsive Mobile Layout */
-@media (max-width: 500px) {
+@media (max-width: 900px) {
   .crextio-form-card {
-    width: calc(100% - 32px);
-    margin: 16px;
-    height: calc(100vh - 32px);
+    width: 100%;
+    margin: 0 0 16px 0;
+    height: auto;
+    min-height: auto;
+  }
+  
+  .form-body {
+    overflow-y: visible;
   }
 }
