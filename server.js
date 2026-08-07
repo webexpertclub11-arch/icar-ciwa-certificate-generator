@@ -163,7 +163,7 @@ app.post('/api/sql', async (req, res) => {
                     $set: {
                         registered_name: args[0], certificate_name: args[1], salutation: args[2],
                         email: args[3], mobile: args[4], wp_no: args[5], kvk_name: args[6],
-                        atari_zone: args[7], serial_number: args[8], is_locked: 1, download_time: args[9]
+                        atari_zone: args[7], serial_number: args[8], is_locked: 0, download_time: args[9]
                     }
                 },
                 { upsert: true }
@@ -194,6 +194,13 @@ app.post('/api/sql', async (req, res) => {
             await db.collection('certificate_downloads').updateMany(
                 { $or: [{ serial_number: args[0] }, { registered_name: args[1] }] },
                 { $set: { is_locked: 0 } }
+            );
+            return res.json({ rows: [] });
+        }
+        if (sql.startsWith("UPDATE CERTIFICATE_DOWNLOADS SET IS_LOCKED = 1")) {
+            await db.collection('certificate_downloads').updateMany(
+                { $or: [{ serial_number: args[0] }, { registered_name: args[1] }] },
+                { $set: { is_locked: 1 } }
             );
             return res.json({ rows: [] });
         }

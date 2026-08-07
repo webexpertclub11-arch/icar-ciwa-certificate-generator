@@ -150,9 +150,8 @@ function App() {
       setDownloadTime(lockRecord.downloadTime);
 
       if (lockRecord.isLocked) {
-        setIsLocked(false); // TEMPORARY: bypass lock to allow multiple edits
-        setFormStep('edit');
-        showToast('🔓 Certificate Loaded: You can edit your details multiple times.', 'info');
+        setIsLocked(true);
+        showToast('🔒 Locked Certificate Loaded: Previous issued certificate retrieved.', 'info');
       } else {
         setIsLocked(false);
         setFormStep('edit');
@@ -325,7 +324,7 @@ function App() {
       const pdfDownloaded = await downloadCertificateAsPDF(certificateRef, fullNameWithSalutation || participantName);
 
       if (pdfDownloaded) {
-        setIsLocked(false); // TEMPORARY: Allow multiple edits, disable lock
+        setIsLocked(false);
         const nowIso = new Date().toISOString();
         setDownloadTime(nowIso);
         showToast('🎉 Certificate Downloaded & Details Saved in ICAR Database!', 'success');
@@ -378,7 +377,7 @@ function App() {
     setParticipantCategory(orgData.category || '');
     setSelectedZone(logItem.atariZone || zoneData.fullName || '');
     setAssignedSerialNumber(logItem.serialNumber || '');
-    setIsLocked(false); // TEMPORARY: Allow multiple edits without locking
+    setIsLocked(logItem.isLocked !== undefined ? logItem.isLocked : true);
     setDownloadTime(logItem.downloadTime);
     setCertSettings(getCertificateSettings());
     setIsAdminLoggedIn(false);

@@ -5,6 +5,7 @@ import {
   fetchAdminMetrics,
   fetchAllDownloadLogs,
   unlockCertificateRecord,
+  lockCertificateRecord,
   deleteDownloadLogRecord,
   updateUserCertificateRecord,
   exportDBToExcel,
@@ -423,7 +424,7 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
   // Checkbox Select All / Toggle Single
   const handleToggleSelectAll = (e) => {
     if (e.target.checked) {
-      const allIds = new Set(paginatedLogs.map(l => l.serialNumber));
+      const allIds = new Set(filteredLogs.map(l => l.serialNumber));
       setSelectedRowIds(allIds);
     } else {
       setSelectedRowIds(new Set());
@@ -467,12 +468,49 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
     }
   };
 
+  // Batch Lock Action
+  const handleBatchLock = async () => {
+    if (selectedRowIds.size === 0) {
+      alert("Please select at least one record to lock.");
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to lock ${selectedRowIds.size} selected certificate records? Users won't be able to edit their details.`)) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      for (const sNo of selectedRowIds) {
+        const item = logs.find(l => l.serialNumber === sNo);
+        await lockCertificateRecord(sNo, item ? item.registeredName : '');
+      }
+      alert(`Successfully locked ${selectedRowIds.size} certificate records!`);
+      setSelectedRowIds(new Set());
+      await loadDashboardData();
+    } catch (e) {
+      alert("Error carrying out batch lock.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Single Record Actions
   const handleUnlockSingle = async (serialNumber, registeredName) => {
     if (window.confirm(`Unlock certificate record for ${registeredName} (${serialNumber})?`)) {
       const success = await unlockCertificateRecord(serialNumber, registeredName);
       if (success) {
         alert("Certificate unlocked! User can now re-edit details.");
+        await loadDashboardData();
+      }
+    }
+  };
+
+  const handleLockSingle = async (serialNumber, registeredName) => {
+    if (window.confirm(`Lock certificate record for ${registeredName} (${serialNumber})? They will not be able to edit details.`)) {
+      const success = await lockCertificateRecord(serialNumber, registeredName);
+      if (success) {
+        alert("Certificate locked! Editing is now disabled for the user.");
         await loadDashboardData();
       }
     }
@@ -657,7 +695,7 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
 
   const handleToggleSelectAllParticipants = (e) => {
     if (e.target.checked) {
-      const pageSerials = new Set(paginatedParticipants.map(p => p.serialNumber));
+      const pageSerials = new Set(filteredParticipants.map(p => p.serialNumber));
       setSelectedParticipantSerials(pageSerials);
     } else {
       setSelectedParticipantSerials(new Set());
@@ -1206,8 +1244,11 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
                   </div>
 
                   <div className="toolbar-flex-row" style={{ margin: 0 }}>
-                    <button type="button" className="btn-admin-outline" onClick={handleBatchUnlock} disabled={selectedRowIds.size === 0}>
-                      🔓 Batch Unlock Selected ({selectedRowIds.size})
+                    <button type="button" className="btn-admin-outline" onClick={handleBatchUnlock} disabled={selectedRowIds.size === 0} style={{ borderColor: 'var(--success-color)', color: 'var(--success-color)' }}>
+                      🔓 Batch Unlock ({selectedRowIds.size})
+                    </button>
+                    <button type="button" className="btn-admin-outline" onClick={handleBatchLock} disabled={selectedRowIds.size === 0} style={{ borderColor: '#ef4444', color: '#b91c1c' }}>
+                      🔒 Batch Lock ({selectedRowIds.size})
                     </button>
                     <button type="button" className="btn-admin-gold" onClick={() => exportDBToExcel(filteredLogs)}>
                       📊 Export Log to Excel
@@ -1273,7 +1314,7 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
                         <th style={{ width: '40px' }}>
                           <input
                             type="checkbox"
-                            checked={paginatedLogs.length > 0 && paginatedLogs.every(l => selectedRowIds.has(l.serialNumber))}
+                            checked={filteredLogs.length > 0 && filteredLogs.every(l => selectedRowIds.has(l.serialNumber))}
                             onChange={handleToggleSelectAll}
                           />
                         </th>
@@ -1378,7 +1419,15 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
                                       🔓 Unlock
                                     </button>
                                   ) : (
-                                    <span style={{ fontSize: '12px', color: '#059669', fontWeight: 600 }}>Unlocked</span>
+                                    <button
+                                      type="button"
+                                      className="btn-admin-outline"
+                                      style={{ height: '30px', padding: '0 10px', fontSize: '12px', borderColor: '#ef4444', color: '#b91c1c' }}
+                                      onClick={() => handleLockSingle(item.serialNumber, item.registeredName)}
+                                      title="Lock Record"
+                                    >
+                                      🔒 Lock
+                                    </button>
                                   )}
                                   <button
                                     type="button"
@@ -1699,7 +1748,7 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
                         <th style={{ width: '40px' }}>
                           <input
                             type="checkbox"
-                            checked={paginatedParticipants.length > 0 && paginatedParticipants.every(p => selectedParticipantSerials.has(p.serialNumber))}
+                            checked={filteredParticipants.length > 0 && filteredParticipants.every(p => selectedParticipantSerials.has(p.serialNumber))}
                             onChange={handleToggleSelectAllParticipants}
                           />
                         </th>

@@ -257,7 +257,7 @@ export const recordDownloadToTurso = async (data) => {
         const localKey = `icar_cert_lock_${data.serialNumber}`;
         const lockPayload = {
             ...data,
-            isLocked: true,
+            isLocked: false,
             downloadTime: data.downloadTime || istTime
         };
         localStorage.setItem(localKey, JSON.stringify(lockPayload));
@@ -288,7 +288,7 @@ export const recordDownloadToTurso = async (data) => {
         await db.execute({
             sql: `INSERT OR REPLACE INTO certificate_downloads 
             (registered_name, certificate_name, salutation, email, mobile, wp_no, kvk_name, atari_zone, serial_number, is_locked, download_time) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
             args: [
                 data.registeredName || 'Unknown',
                 data.certificateName || 'Unknown',
@@ -676,6 +676,48 @@ export const unlockCertificateRecord = async (serialNumber, registeredName) => {
         return true;
     } catch (err) {
         console.error("Error unlocking in DB:", err);
+        return false;
+    }
+};
+
+/**
+ * Lock a Certificate record manually so participant cannot edit
+ */
+export const lockCertificateRecord = async (serialNumber, registeredName) => {
+    try {
+        if (serialNumber) {
+            localStorage.removeItem(`icar_cert_lock_${serialNumber}`);
+        }
+        if (registeredName) {
+            localStorage.removeItem(`icar_cert_lock_user_${registeredName.toLowerCase()}`);
+        }
+
+        const logsRaw = localStorage.getItem('icar_all_local_download_logs');
+        if (logsRaw) {
+            const logs = JSON.parse(logsRaw).map(item => {
+                if (item.serialNumber === serialNumber || item.registeredName === registeredName) {
+                    return { ...item, isLocked: true };
+                }
+                return item;
+            });
+            localStorage.setItem('icar_all_local_download_logs', JSON.stringify(logs));
+        }
+    } catch (e) {
+        console.warn("LocalStorage lock explicitly error:", e);
+    }
+
+    const db = getDb();
+    if (!db) return true;
+
+    try {
+        await db.execute({
+            sql: `UPDATE certificate_downloads SET is_locked = 1 WHERE serial_number = ? OR registered_name = ?`,
+            args: [serialNumber || '', registeredName || '']
+        });
+        console.log("Successfully locked certificate record in Turso DB!");
+        return true;
+    } catch (err) {
+        console.error("Error locking in DB:", err);
         return false;
     }
 };
