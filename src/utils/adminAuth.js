@@ -1,5 +1,5 @@
 /**
- * Admin Authentication & Security Management (Turso Database Integration)
+ * Admin Authentication & Security Management (Database Integration)
  */
 import { fetchAdminPasswordFromDB, updateAdminPasswordInDB } from './dbTracker';
 
@@ -7,7 +7,7 @@ const ADMIN_PASSWORD_KEY = 'icar_admin_master_password';
 
 let cachedDbPassword = null;
 
-// Initial sync with Turso DB
+// Initial sync with Database
 fetchAdminPasswordFromDB().then(dbPass => {
     if (dbPass) {
         cachedDbPassword = dbPass;
@@ -28,7 +28,7 @@ export const getAdminPassword = () => {
 };
 
 /**
- * Verify input password against current admin master password in Turso DB
+ * Verify input password against current admin master password in Database
  */
 export const verifyAdminPassword = async (inputPassword) => {
     if (!inputPassword) return false;
@@ -50,7 +50,7 @@ export const verifyAdminPassword = async (inputPassword) => {
 };
 
 /**
- * Update admin master password in Turso DB & local storage
+ * Update admin master password in Database & local storage
  */
 export const updateAdminPassword = async (newPassword) => {
     if (!newPassword || newPassword.trim().length < 4) {

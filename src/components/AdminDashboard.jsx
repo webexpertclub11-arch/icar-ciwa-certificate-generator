@@ -10,6 +10,7 @@ import {
   updateUserCertificateRecord,
   exportDBToExcel,
   fetchParticipantsList,
+  fetchParticipantsFromDB,
   addParticipantRecord,
   deleteParticipantRecord,
   deleteParticipantRecordsBatch,
@@ -64,6 +65,7 @@ const getInitials = (name = '') => {
 
 const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
   const [activeTab, setActiveTab] = useState('logs'); // 'metrics', 'logs', 'participants', 'organizations', 'updates', 'settings', 'security'
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loading, setLoading] = useState(true);
 
   // Metrics State
@@ -253,7 +255,7 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
   };
 
   const [toast, setToast] = useState({ text: '', type: 'info', title: '' });
-  const [loadingText, setLoadingText] = useState({ message: 'Refreshing Database Records...', subtext: 'Syncing Turso DB & Participant Registries' });
+  const [loadingText, setLoadingText] = useState({ message: 'Refreshing Database Records...', subtext: 'Syncing Database & Participant Registries' });
 
   const triggerToast = (text, type = 'info', title = '', duration = 4000) => {
     setToast({ text, type, title });
@@ -269,24 +271,23 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
 
   const loadDashboardData = async (isManualRefresh = false) => {
     if (isManualRefresh) {
-      setLoadingText({ message: 'Refreshing Database Records...', subtext: 'Syncing Turso DB & Participant Registries' });
+      setLoadingText({ message: 'Refreshing Database Records...', subtext: 'Syncing Database & Participant Registries' });
     } else {
-      setLoadingText({ message: 'Loading Admin Portal...', subtext: 'Connecting to Turso Database' });
+      setLoadingText({ message: 'Loading Admin Portal...', subtext: 'Connecting to Database' });
     }
     setLoading(true);
     try {
-      const [metricsData, logsData, orgsData, supportData] = await Promise.all([
+      const [metricsData, logsData, orgsData, supportData, pList] = await Promise.all([
         fetchAdminMetrics(),
         fetchAllDownloadLogs(),
         fetchOrganizationsList(),
-        fetchAllSupportTickets()
+        fetchAllSupportTickets(),
+        fetchParticipantsFromDB()
       ]);
       setMetrics(metricsData);
       setLogs(logsData);
       setOrganizationsList(orgsData);
       setSupportTickets(supportData);
-
-      const pList = fetchParticipantsList();
       setParticipants(pList);
       setCertSettings(getCertificateSettings());
       setAnnouncements(getAnnouncements());
@@ -406,7 +407,7 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
 
       const result = await bulkRegisterOrganizations(parsedRows);
       if (result.success) {
-        triggerToast(`Bulk Import Successful! Imported ${result.addedCount} institutes/organizations into Turso DB.`, "success", "Bulk Import Complete");
+        triggerToast(`Bulk Import Successful! Imported ${result.addedCount} institutes/organizations into Database.`, "success", "Bulk Import Complete");
         const updatedOrgs = await fetchOrganizationsList();
         setOrganizationsList(updatedOrgs);
       } else {
@@ -1050,79 +1051,183 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
   };
 
   return (
-    <div className="admin-shell">
+    <div className={`admin-shell ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
       {/* Glassmorphism Loader & Toast Notifications */}
       <GlassLoader isLoading={loading} message={loadingText.message} subtext={loadingText.subtext} />
       <GlassToast toast={toast} onClose={() => setToast({ text: '', type: 'info', title: '' })} />
 
-      {/* ═══════════ FIXED SIDEBAR ═══════════ */}
-      <aside className="admin-sidebar">
-        {/* Brand */}
+      {/* ═══════════ PUBLER-STYLE SIDEBAR ═══════════ */}
+      <aside className={`admin-sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
+        {/* Header: Brand on left, Publer collapse toggle on right */}
         <div className="sb-brand">
-          <img src={ciwaLogo} alt="ICAR-CIWA" className="sb-brand-logo" />
-          <div className="sb-brand-text">
-            <span className="sb-brand-name">ICAR-CIWA</span>
-            <span className="sb-brand-sub">Admin Portal</span>
+          <div className="sb-brand-main">
+            <img src={ciwaLogo} alt="ICAR-CIWA" className="sb-brand-logo" />
+            <div className="sb-brand-text">
+              <span className="sb-brand-name">ICAR-CIWA</span>
+              <span className="sb-brand-sub">Admin Portal</span>
+            </div>
           </div>
+
+          {/* Publer-style collapse icon: arrow + menu lines */}
+          <button
+            className="sb-publer-toggle"
+            onClick={() => setSidebarOpen(o => !o)}
+            title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            aria-label="Toggle sidebar"
+          >
+            {sidebarOpen ? (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="10 17 5 12 10 7" />
+                <line x1="14" y1="9" x2="20" y2="9" />
+                <line x1="14" y1="15" x2="20" y2="15" />
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="14 17 19 12 14 7" />
+                <line x1="4" y1="9" x2="10" y2="9" />
+                <line x1="4" y1="15" x2="10" y2="15" />
+              </svg>
+            )}
+          </button>
         </div>
 
         {/* DB Status */}
         <div className="sb-db-status">
           <span className="sb-db-dot"></span>
-          <span>Turso DB Connected</span>
+          <span className="sb-db-label">Database Connected</span>
         </div>
 
-        {/* Navigation */}
+        {/* Navigation with Publer-Style Outline Icons */}
         <nav className="sb-nav-section">
           <div className="sb-nav-label">Main</div>
 
-          <button className={`sb-nav-item ${activeTab === 'metrics' ? 'active' : ''}`} onClick={() => setActiveTab('metrics')}>
-            <span className="sb-nav-icon">📊</span> Analytics
+          {/* Analytics: Line / Trend Chart Icon */}
+          <button className={`sb-nav-item ${activeTab === 'metrics' ? 'active' : ''}`} onClick={() => setActiveTab('metrics')} title="Analytics">
+            <span className="sb-nav-icon">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 17 9 11 13 15 21 7" />
+                <polyline points="14 7 21 7 21 14" />
+              </svg>
+            </span>
+            <span className="sb-nav-text">Analytics</span>
           </button>
 
-          <button className={`sb-nav-item ${activeTab === 'logs' ? 'active' : ''}`} onClick={() => setActiveTab('logs')}>
-            <span className="sb-nav-icon">📜</span> Certificate Log
+          {/* Certificate Log: Document / Post Icon */}
+          <button className={`sb-nav-item ${activeTab === 'logs' ? 'active' : ''}`} onClick={() => setActiveTab('logs')} title="Certificate Log">
+            <span className="sb-nav-icon">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
+              </svg>
+            </span>
+            <span className="sb-nav-text">Certificate Log</span>
             {filteredLogs.length > 0 && <span className="sb-nav-badge">{filteredLogs.length}</span>}
           </button>
 
-          <button className={`sb-nav-item ${activeTab === 'participants' ? 'active' : ''}`} onClick={() => setActiveTab('participants')}>
-            <span className="sb-nav-icon">👥</span> Participants
+          {/* Participants: Users Outline Icon */}
+          <button className={`sb-nav-item ${activeTab === 'participants' ? 'active' : ''}`} onClick={() => setActiveTab('participants')} title="Participants">
+            <span className="sb-nav-icon">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+            </span>
+            <span className="sb-nav-text">Participants</span>
             {participants.length > 0 && <span className="sb-nav-badge">{participants.length}</span>}
           </button>
 
-          <button className={`sb-nav-item ${activeTab === 'organizations' ? 'active' : ''}`} onClick={() => setActiveTab('organizations')}>
-            <span className="sb-nav-icon">🏢</span> Organizations
+          {/* Organizations: Building Icon */}
+          <button className={`sb-nav-item ${activeTab === 'organizations' ? 'active' : ''}`} onClick={() => setActiveTab('organizations')} title="Organizations">
+            <span className="sb-nav-icon">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
+                <line x1="9" y1="22" x2="9" y2="2" />
+                <line x1="8" y1="6" x2="10" y2="6" />
+                <line x1="14" y1="6" x2="16" y2="6" />
+                <line x1="8" y1="10" x2="10" y2="10" />
+                <line x1="14" y1="10" x2="16" y2="10" />
+                <line x1="8" y1="14" x2="10" y2="14" />
+                <line x1="14" y1="14" x2="16" y2="14" />
+              </svg>
+            </span>
+            <span className="sb-nav-text">Organizations</span>
           </button>
 
-          <div className="sb-nav-label">Communication & Support</div>
+          <div className="sb-nav-label">Communication</div>
 
-          <button className={`sb-nav-item ${activeTab === 'updates' ? 'active' : ''}`} onClick={() => setActiveTab('updates')}>
-            <span className="sb-nav-icon">📢</span> Announcements
+          {/* Announcements: Broadcast / RSS Feed Icon */}
+          <button className={`sb-nav-item ${activeTab === 'updates' ? 'active' : ''}`} onClick={() => setActiveTab('updates')} title="Announcements">
+            <span className="sb-nav-icon">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 11a9 9 0 0 1 9 9" />
+                <path d="M4 4a16 16 0 0 1 16 16" />
+                <circle cx="5" cy="19" r="1.5" />
+              </svg>
+            </span>
+            <span className="sb-nav-text">Announcements</span>
             {announcements.length > 0 && <span className="sb-nav-badge">{announcements.length}</span>}
           </button>
 
-          <button className={`sb-nav-item ${activeTab === 'support' ? 'active' : ''}`} onClick={() => setActiveTab('support')}>
-            <span className="sb-nav-icon">🎫</span> Support Tickets
+          {/* Support Tickets: Ticket / Help Icon */}
+          <button className={`sb-nav-item ${activeTab === 'support' ? 'active' : ''}`} onClick={() => setActiveTab('support')} title="Support Tickets">
+            <span className="sb-nav-icon">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+            </span>
+            <span className="sb-nav-text">Support Tickets</span>
             {supportTickets.filter(t => t.status === 'pending').length > 0 &&
-              <span className="sb-nav-badge" style={{ backgroundColor: '#ef4444' }}>{supportTickets.filter(t => t.status === 'pending').length} Action Required</span>}
+              <span className="sb-nav-badge sb-nav-badge-alert">{supportTickets.filter(t => t.status === 'pending').length}</span>}
           </button>
 
           <div className="sb-nav-label">System</div>
 
-          <button className={`sb-nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
-            <span className="sb-nav-icon">⚙️</span> Settings
+          {/* Settings: Sliders / Gear Icon */}
+          <button className={`sb-nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')} title="Settings">
+            <span className="sb-nav-icon">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="4" y1="21" x2="4" y2="14" />
+                <line x1="4" y1="10" x2="4" y2="3" />
+                <line x1="12" y1="21" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12" y2="3" />
+                <line x1="20" y1="21" x2="20" y2="16" />
+                <line x1="20" y1="12" x2="20" y2="3" />
+                <line x1="1" y1="14" x2="7" y2="14" />
+                <line x1="9" y1="8" x2="15" y2="8" />
+                <line x1="17" y1="16" x2="23" y2="16" />
+              </svg>
+            </span>
+            <span className="sb-nav-text">Settings</span>
           </button>
 
-          <button className={`sb-nav-item ${activeTab === 'security' ? 'active' : ''}`} onClick={() => setActiveTab('security')}>
-            <span className="sb-nav-icon">🔑</span> Security
+          {/* Security: Shield Icon */}
+          <button className={`sb-nav-item ${activeTab === 'security' ? 'active' : ''}`} onClick={() => setActiveTab('security')} title="Security">
+            <span className="sb-nav-icon">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+            </span>
+            <span className="sb-nav-text">Security</span>
           </button>
         </nav>
 
         {/* Sidebar Footer */}
         <div className="sb-footer">
-          <button className="sb-logout-btn" onClick={onExitAdmin}>
-            <span>🚪</span>
-            <span>Exit Admin Portal</span>
+          <button className="sb-logout-btn" onClick={onExitAdmin} title="Exit Admin Portal">
+            <span className="sb-nav-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+            </span>
+            <span className="sb-nav-text">Exit Admin Portal</span>
           </button>
         </div>
       </aside>
@@ -1130,17 +1235,21 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
       {/* ═══════════ MAIN CONTENT AREA ═══════════ */}
       <div className="admin-main-area">
 
-        {/* Top Bar */}
+        {/* Top Bar with Simple Clean Breadcrumb */}
         <header className="admin-topbar">
           <div className="topbar-left">
-            <span className="topbar-page-title">{tabTitles[activeTab]}</span>
-            <span className="topbar-breadcrumb">ICAR-CIWA &gt; Admin &gt; {tabTitles[activeTab]}</span>
+            <div className="topbar-breadcrumb-nav">
+              <span className="breadcrumb-root">Portal</span>
+              <span className="breadcrumb-separator">/</span>
+              <span className="breadcrumb-current">{tabTitles[activeTab]}</span>
+            </div>
+            <h1 className="topbar-page-title">{tabTitles[activeTab]}</h1>
           </div>
           <div className="topbar-right">
-            <button className="topbar-action-btn" onClick={() => exportDBToExcel(filteredLogs)}>
+            <button className="topbar-action-btn" onClick={() => exportDBToExcel(filteredLogs)} title="Export current certificate records to Excel">
               📊 Export Excel
             </button>
-            <button className="topbar-action-btn primary-glow" onClick={() => loadDashboardData(true)} disabled={loading}>
+            <button className="topbar-action-btn primary-glow" onClick={() => loadDashboardData(true)} disabled={loading} title="Sync and refresh all database records">
               🔄 Refresh Data
             </button>
           </div>
@@ -1152,10 +1261,71 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
           {/* TAB 1: ANALYTICS & OVERVIEW */}
           {activeTab === 'metrics' && (
             <div className="animate-fade">
+
+              {/* Prominent Live Progress Card */}
+              {(() => {
+                const completionPct = metrics.totalParticipants > 0 ? Math.round((metrics.totalIssued / metrics.totalParticipants) * 100) : 0;
+                return (
+                  <div className="admin-card progress-overview-card">
+                    <div className="progress-overview-header">
+                      <div className="progress-overview-info">
+                        <span className="progress-badge">🎯 Live Progress</span>
+                        <h3>Certificate Issuance & Completion Overview</h3>
+                        <p>Real-time completion percentage across all registered participants</p>
+                      </div>
+                      <div className="progress-percentage-display">
+                        <span className="progress-pct-number">{completionPct}%</span>
+                        <span className="progress-pct-sub">Completed</span>
+                      </div>
+                    </div>
+
+                    {/* Animated Progress Bar */}
+                    <div className="progress-track-large">
+                      <div
+                        className="progress-fill-large"
+                        style={{ width: `${Math.min(100, Math.max(completionPct, completionPct > 0 ? 2 : 0))}%` }}
+                      >
+                        <div className="progress-fill-shine"></div>
+                      </div>
+                    </div>
+
+                    {/* Progress Quick Breakdown Pills */}
+                    <div className="progress-breakdown-row">
+                      <div className="breakdown-stat-item">
+                        <span className="breakdown-dot dot-issued"></span>
+                        <span className="breakdown-label">Issued & Locked:</span>
+                        <strong>{metrics.totalIssued}</strong>
+                      </div>
+                      <div className="breakdown-stat-item">
+                        <span className="breakdown-dot dot-pending"></span>
+                        <span className="breakdown-label">Pending Downloads:</span>
+                        <strong>{metrics.remainingParticipants}</strong>
+                      </div>
+                      <div className="breakdown-stat-item">
+                        <span className="breakdown-dot dot-total"></span>
+                        <span className="breakdown-label">Total Registered:</span>
+                        <strong>{metrics.totalParticipants}</strong>
+                      </div>
+                      <div className="breakdown-stat-item">
+                        <span className="breakdown-dot dot-today"></span>
+                        <span className="breakdown-label">Issued Today:</span>
+                        <strong>{metrics.downloadsToday}</strong>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="metrics-grid-4">
                 <div className="metric-stat-box stat-gold">
                   <span className="stat-label-text">Total Certificates Issued</span>
                   <span className="stat-value-text">{metrics.totalIssued}</span>
+                  <div className="stat-mini-progress-track">
+                    <div
+                      className="stat-mini-progress-fill stat-fill-gold"
+                      style={{ width: `${metrics.totalParticipants > 0 ? Math.round((metrics.totalIssued / metrics.totalParticipants) * 100) : 0}%` }}
+                    ></div>
+                  </div>
                   <span className="stat-sub-badge badge-gold">
                     {metrics.totalParticipants > 0 ? Math.round((metrics.totalIssued / metrics.totalParticipants) * 100) : 0}% Completion
                   </span>
@@ -1164,19 +1334,31 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
                 <div className="metric-stat-box stat-navy">
                   <span className="stat-label-text">Registered Participants</span>
                   <span className="stat-value-text">{metrics.totalParticipants}</span>
-                  <span className="stat-sub-badge badge-blue">Registered Headcount</span>
+                  <div className="stat-mini-progress-track">
+                    <div className="stat-mini-progress-fill stat-fill-blue" style={{ width: '100%' }}></div>
+                  </div>
+                  <span className="stat-sub-badge badge-blue">Official Roster</span>
                 </div>
 
-                <div className="metric-stat-box">
+                <div className="metric-stat-box stat-amber-card">
                   <span className="stat-label-text">Pending Certificate Downloads</span>
                   <span className="stat-value-text">{metrics.remainingParticipants}</span>
-                  <span className="stat-sub-badge badge-green">Awaiting Action</span>
+                  <div className="stat-mini-progress-track">
+                    <div
+                      className="stat-mini-progress-fill stat-fill-amber"
+                      style={{ width: `${metrics.totalParticipants > 0 ? Math.round((metrics.remainingParticipants / metrics.totalParticipants) * 100) : 0}%` }}
+                    ></div>
+                  </div>
+                  <span className="stat-sub-badge badge-gold">Awaiting Download</span>
                 </div>
 
                 <div className="metric-stat-box stat-emerald">
-                  <span className="stat-label-text">Issued Today</span>
+                  <span className="stat-label-text">Issued Today (IST)</span>
                   <span className="stat-value-text">{metrics.downloadsToday}</span>
-                  <span className="stat-sub-badge badge-green">Live Activity</span>
+                  <div className="stat-mini-progress-track">
+                    <div className="stat-mini-progress-fill stat-fill-emerald" style={{ width: `${metrics.downloadsToday > 0 ? Math.min(100, metrics.downloadsToday * 10) : 0}%` }}></div>
+                  </div>
+                  <span className="stat-sub-badge badge-green">Live Active Today</span>
                 </div>
               </div>
 
@@ -1868,7 +2050,7 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
                 <div className="admin-card-header">
                   <div>
                     <h3>🏢 Manage Institutions & Organization Categories</h3>
-                    <p>Add, edit, bulk import, and categorize ATARI KVKs, ICAR Institutes, SAUs, and CAUs live in Turso DB.</p>
+                    <p>Add, edit, bulk import, and categorize ATARI KVKs, ICAR Institutes, SAUs, and CAUs live in Database.</p>
                   </div>
                   <div className="action-buttons-flex" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                     <button
@@ -2708,7 +2890,7 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
                   <button type="button" className="btn-admin-outline" onClick={() => setEditingLog(null)}>Cancel</button>
-                  <button type="submit" className="btn-admin-primary">💾 Save & Update Record in Turso DB</button>
+                  <button type="submit" className="btn-admin-primary">💾 Save & Update Record in Database</button>
                 </div>
               </form>
             </div>

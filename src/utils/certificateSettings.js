@@ -46,8 +46,8 @@ export const saveCertificateSettings = (newSettings) => {
         const updated = { ...current, ...newSettings };
         localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updated));
 
-        // Save to Turso asynchronously
-        updateSystemConfig(updated).catch(e => console.error("Firebase sync error", e));
+        // Save to Database asynchronously
+        updateSystemConfig(updated).catch(e => console.error("Database sync error", e));
 
         // Dispatch custom event for real-time reactivity across components
         if (typeof window !== 'undefined') {

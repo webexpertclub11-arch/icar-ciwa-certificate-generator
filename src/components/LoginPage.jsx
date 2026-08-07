@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './LoginPage.css';
 import icarLogo from '../assets/icarlogoright.gif';
 import ciwaLogo from '../assets/leftsidelogo.png';
-import { fetchParticipantsList, fetchParticipantsFromTurso } from '../utils/dbTracker';
+import { fetchParticipantsList, fetchParticipantsFromDB } from '../utils/dbTracker';
 import { verifyAdminPassword } from '../utils/adminAuth';
 import { isParticipantDownloadEnabled } from '../utils/certificateSettings';
 const LoginPage = ({ onLogin, onAdminExport }) => {
@@ -23,13 +23,13 @@ const LoginPage = ({ onLogin, onAdminExport }) => {
     const [adminError, setAdminError] = useState('');
     const [showAdminPassword, setShowAdminPassword] = useState(false);
 
-    // Load participants on mount & fetch asynchronously from Turso DB for fresh browser sessions
+    // Load participants on mount & fetch asynchronously from Database for fresh browser sessions
     useEffect(() => {
         // 1. Instant load from LocalStorage cache
         setParticipantsList(fetchParticipantsList());
 
-        // 2. Async fetch directly from Turso DB for immediate update on fresh browser load
-        fetchParticipantsFromTurso().then(list => {
+        // 2. Async fetch directly from Database for immediate update on fresh browser load
+        fetchParticipantsFromDB().then(list => {
             if (list && list.length > 0) {
                 setParticipantsList(list);
             }
@@ -169,16 +169,16 @@ const LoginPage = ({ onLogin, onAdminExport }) => {
                         <div className="brand-divider"></div>
                         <img src={icarLogo} alt="ICAR Logo" className="brand-logo right" />
                     </div>
-                    <h2>ICAR-CIWA Training Portal</h2>
+                    <h2>ICAR-CIWA Certificate Portal</h2>
                     <p className="login-subtitle">
                         {activeRole === 'admin'
-                            ? 'Enter master password to access Admin Control Panel'
-                            : 'Verify your identity to access'}
+                            ? '🛡️ Admin Dashboard — Manage certificate records, participant roster & live analytics'
+                            : '🎓 Participant Portal — Select your name & verify details to download certificate'}
                     </p>
 
-                    {/* Role Toggle — Smooth Sliding Pill */}
+                    {/* Role Toggle — Smooth Glassmorphism Sliding Capsule */}
                     <div className="role-toggle-wrapper">
-                        <div className="role-toggle-track">
+                        <div className="role-toggle-track glass-toggle-track">
                             {/* Animated sliding background */}
                             <div className={`role-toggle-slider ${activeRole === 'user' ? 'slide-user' : 'slide-admin'}`}></div>
 
@@ -186,28 +186,29 @@ const LoginPage = ({ onLogin, onAdminExport }) => {
                                 type="button"
                                 className={`role-toggle-btn ${activeRole === 'user' ? 'active-role' : ''}`}
                                 onClick={() => handleRoleSwitch('user')}
+                                title="Click to login as Participant and download certificate"
                             >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                                     <circle cx="12" cy="7" r="4"></circle>
                                 </svg>
-                                Participant
+                                <span>Participant Login</span>
                             </button>
 
                             <button
                                 type="button"
                                 className={`role-toggle-btn ${activeRole === 'admin' ? 'active-role' : ''}`}
                                 onClick={() => handleRoleSwitch('admin')}
+                                title="Click to access Admin Dashboard & Analytics"
                             >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                                 </svg>
-                                Admin Portal
+                                <span>Admin Dashboard</span>
                             </button>
                         </div>
                     </div>
-
-                    {/* Step Indicator removed as there are no longer multiple steps */}
                 </div>
 
                 {/* Participant Mode Forms */}
@@ -321,11 +322,11 @@ const LoginPage = ({ onLogin, onAdminExport }) => {
                 {/* Inline Admin Mode Form inside Claymorphism Window */}
                 {activeRole === 'admin' && (
                     <form onSubmit={handleAdminSubmit} className="login-form animate-fade admin-inline-form">
-                        <div className="admin-badge-banner">
-                            <span className="admin-lock-badge-icon">🔒</span>
+                        <div className="admin-badge-banner glass-admin-banner">
+                            <span className="admin-lock-badge-icon">🛡️</span>
                             <div className="admin-badge-text">
-                                <strong>Admin Authentication</strong>
-                                <small>Restricted access for system administrators</small>
+                                <strong>Admin Portal Login</strong>
+                                <small>Enter administrator password to access live metrics, participant roster & certificate downloads</small>
                             </div>
                         </div>
 
@@ -335,12 +336,12 @@ const LoginPage = ({ onLogin, onAdminExport }) => {
                                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                                     <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                                 </svg>
-                                Admin Password
+                                Master Admin Password
                             </label>
                             <div className="password-input-wrapper">
                                 <input
                                     type={showAdminPassword ? "text" : "password"}
-                                    placeholder="Enter admin password..."
+                                    placeholder="Enter administrator password..."
                                     value={adminPassword}
                                     onChange={(e) => {
                                         setAdminPassword(e.target.value);
@@ -368,7 +369,7 @@ const LoginPage = ({ onLogin, onAdminExport }) => {
                         )}
 
                         <button type="submit" className="btn-login btn-admin-submit">
-                            Access Admin Dashboard
+                            Open Admin Dashboard
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '8px' }}>
                                 <line x1="5" y1="12" x2="19" y2="12"></line>
                                 <polyline points="12 5 19 12 12 19"></polyline>

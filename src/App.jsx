@@ -7,7 +7,7 @@ import AdminDashboard from './components/AdminDashboard';
 import UserDashboard from './components/UserDashboard';
 import SupportTicketPage from './components/SupportTicketPage';
 import { downloadCertificateAsPDF, printCertificate } from './utils/downloadCertificate';
-import { initializeDB, recordDownloadToTurso, checkCertificateLockStatus, fetchOrganizationsList, fetchSystemConfig } from './utils/dbTracker';
+import { initializeDB, recordDownloadToDB, checkCertificateLockStatus, fetchOrganizationsList, fetchSystemConfig } from './utils/dbTracker';
 import { getCertificateSettings, isParticipantDownloadEnabled, checkDownloadWindowStatus, getParticipantPermissions, forceSetCertificateSettings } from './utils/certificateSettings';
 import { initSecurityGuard } from './utils/securityGuard';
 
@@ -319,7 +319,7 @@ function App() {
         serialNumber: assignedSerialNumber
       };
 
-      await recordDownloadToTurso(payload);
+      await recordDownloadToDB(payload);
 
       const pdfDownloaded = await downloadCertificateAsPDF(certificateRef, fullNameWithSalutation || participantName);
 

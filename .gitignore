@@ -1,31 +1,72 @@
-# Logs & Debug
+# ── Environment Variables & Secret Credentials ──
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+*.env.local
+
+# ── Dependencies ──
+node_modules/
+.pnp
+.pnp.js
+.npm/
+
+# ── Production Build & Serverless Output ──
+dist/
+dist-ssr/
+build/
+out/
+.vercel
+.output/
+
+# ── Logs & Debugging ──
 logs
 *.log
 npm-debug.log*
 yarn-debug.log*
+yarn-error.log*
 pnpm-debug.log*
+lerna-debug.log*
 
-# Dependencies
-node_modules/
+# ── Temporary, ZIP & Export Files ──
+*.zip
+*.tar.gz
+*.pdf
+*.xlsx
+*.csv.tmp
+tmp/
+temp/
+scratch/
 
-# Production Build Output
-dist/
-dist-ssr/
-build/
+# ── Testing & Coverage ──
+coverage/
+.nyc_output/
 
-# Environment Variables & Secret Credentials
-.env
-.env.local
-.env.*.local
-
-# Editor & System Files
-.vscode/
+# ── Editor & IDE Directories ──
+.vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
 .idea/
-.DS_Store
-Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.swo
+*.swp
+
+# ── Operating System Files ──
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ── Local Agent & Workspace Metadata ──
+.gemini/
+.agents/
+.system_generated/

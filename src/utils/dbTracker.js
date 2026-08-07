@@ -125,7 +125,7 @@ export const initializeDB = async () => {
                     sql: `INSERT INTO admin_auth (role, password_hash) VALUES ('superadmin', ?)`,
                     args: [initPass]
                 });
-                console.log("Initialized superadmin credentials in Turso DB!");
+                console.log("Initialized superadmin credentials in Database!");
             }
         } catch (e) {
             console.warn("Notice seeding admin_auth:", e);
@@ -177,7 +177,7 @@ export const initializeDB = async () => {
         try { await db.execute(`CREATE INDEX IF NOT EXISTS idx_part_serial ON participants(serial_number);`); } catch (_) { }
         try { await db.execute(`CREATE INDEX IF NOT EXISTS idx_org_category ON organizations(category);`); } catch (_) { }
 
-        // Sync participants from Turso DB to LocalStorage and notify UI
+        // Sync participants from Database to LocalStorage and notify UI
         try {
             const dbParticipants = await db.execute("SELECT * FROM participants ORDER BY name ASC");
             if (dbParticipants.rows && dbParticipants.rows.length > 0) {
@@ -196,7 +196,7 @@ export const initializeDB = async () => {
                 }
             }
         } catch (e) {
-            console.warn("Error syncing participants from Turso DB:", e);
+            console.warn("Error syncing participants from Database:", e);
         }
 
         // Create support_tickets table (NEW MODULE)
@@ -213,16 +213,16 @@ export const initializeDB = async () => {
             )
         `);
 
-        console.log("Turso Database checked/initialized successfully!");
+        console.log("Database checked/initialized successfully!");
     } catch (e) {
         console.error("Failed to initialize DB:", e);
     }
 };
 
 /**
- * Async fetch participants list directly from Turso DB to ensure fresh browser load without reload requirement
+ * Async fetch participants list directly from Database to ensure fresh browser load without reload requirement
  */
-export const fetchParticipantsFromTurso = async () => {
+export const fetchParticipantsFromDB = async () => {
     const db = getDb();
     if (!db) return fetchParticipantsList();
 
@@ -242,15 +242,16 @@ export const fetchParticipantsFromTurso = async () => {
             return formattedList;
         }
     } catch (e) {
-        console.warn("Error fetching participants from Turso DB:", e);
+        console.warn("Error fetching participants from Database:", e);
     }
     return fetchParticipantsList();
 };
+export const fetchParticipantsFromTurso = fetchParticipantsFromDB;
 
 /**
- * Record a new certificate download directly to Turso DB (and mark as locked).
+ * Record a new certificate download directly to Database (and mark as locked).
  */
-export const recordDownloadToTurso = async (data) => {
+export const recordDownloadToDB = async (data) => {
     const istTime = getIndianStandardTime();
     // 1. Always record in LocalStorage for instant immutability lock fallback
     try {
@@ -280,33 +281,36 @@ export const recordDownloadToTurso = async (data) => {
         console.warn("LocalStorage lock save warning:", e);
     }
 
-    // 2. Save into Turso Database table `certificate_downloads`
-    const db = getDb();
-    if (!db) return;
-
+    // 2. Save into Database table `certificate_downloads`
     try {
+        const db = getDb();
+        if (!db) return;
+
         await db.execute({
-            sql: `INSERT OR REPLACE INTO certificate_downloads 
-            (registered_name, certificate_name, salutation, email, mobile, wp_no, kvk_name, atari_zone, serial_number, is_locked, download_time) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+            sql: `
+        INSERT OR REPLACE INTO certificate_downloads 
+        (registered_name, certificate_name, salutation, email, mobile, wp_no, kvk_name, atari_zone, serial_number, download_time) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
             args: [
                 data.registeredName || 'Unknown',
                 data.certificateName || 'Unknown',
                 data.salutation || '',
                 data.email || 'N/A',
                 data.mobile || 'N/A',
-                data.wp || data.wp_no || 'N/A',
+                data.wp || 'N/A',
                 data.kvkName || 'Unknown',
                 data.atariZone || 'Unknown',
                 data.serialNumber || 'N/A',
                 istTime
             ]
         });
-        console.log("Successfully saved locked certificate record with IST timestamp to Turso Database!");
+        console.log("Successfully saved locked certificate record with IST timestamp to Database!");
     } catch (err) {
-        console.error("Error saving to Turso:", err);
+        console.error("Error saving to Database:", err);
     }
 };
+export const recordDownloadToTurso = recordDownloadToDB;
 
 /**
  * Dynamic Participant Management (Add, List, Delete, Update)
@@ -370,9 +374,9 @@ export const addParticipantRecord = (newParticipant) => {
                             newParticipant.isRestricted ? 1 : 0
                         ]
                     });
-                    console.log("Successfully inserted/updated participant with IST timestamp in Turso DB!");
+                    console.log("Successfully inserted/updated participant with IST timestamp in DB!");
                 } catch (err) {
-                    console.error("Error inserting participant to Turso DB:", err);
+                    console.error("Error inserting participant to DB:", err);
                 }
             })();
         }
@@ -402,9 +406,9 @@ export const deleteParticipantRecord = (id) => {
                     sql: `DELETE FROM participants WHERE id = ? OR serial_number = ?`,
                     args: [id || '', targetSerial || '']
                 });
-                console.log("Successfully deleted participant from Turso DB!");
+                console.log("Successfully deleted participant from DB!");
             } catch (err) {
-                console.error("Error deleting participant from Turso DB:", err);
+                console.error("Error deleting participant from DB:", err);
             }
         })();
     }
@@ -440,9 +444,9 @@ export const deleteParticipantRecordsBatch = (ids, serials = []) => {
                         args: ids
                     });
                 }
-                console.log(`Successfully batch deleted ${ids.length || serials.length} participants from Turso DB!`);
+                console.log(`Successfully batch deleted ${ids.length || serials.length} participants from DB!`);
             } catch (err) {
-                console.error("Error batch deleting participants from Turso DB:", err);
+                console.error("Error batch deleting participants from DB:", err);
             }
         })();
     }
@@ -492,9 +496,9 @@ export const updateParticipantRecord = (id, updatedData) => {
                             updatedParticipant.serialNumber || ''
                         ]
                     });
-                    console.log("Successfully updated participant in Turso DB!");
+                    console.log("Successfully updated participant in DB!");
                 } catch (err) {
-                    console.error("Error updating participant in Turso DB:", err);
+                    console.error("Error updating participant in DB:", err);
                 }
             })();
         }
@@ -607,7 +611,7 @@ export const updateUserCertificateRecord = async (targetSerialNumber, updatedDat
         console.warn("LocalStorage edit update warning:", e);
     }
 
-    // 2. Update in Turso DB
+    // 2. Update in Database
     const db = getDb();
     if (!db) return true;
 
@@ -630,7 +634,7 @@ export const updateUserCertificateRecord = async (targetSerialNumber, updatedDat
                 targetSerialNumber
             ]
         });
-        console.log("Successfully updated certificate record in Turso DB!");
+        console.log("Successfully updated certificate record in DB!");
         return true;
     } catch (err) {
         console.error("Error updating DB record:", err);
@@ -672,7 +676,7 @@ export const unlockCertificateRecord = async (serialNumber, registeredName) => {
             sql: `UPDATE certificate_downloads SET is_locked = 0 WHERE serial_number = ? OR registered_name = ?`,
             args: [serialNumber || '', registeredName || '']
         });
-        console.log("Successfully unlocked certificate record in Turso DB!");
+        console.log("Successfully unlocked certificate record in DB!");
         return true;
     } catch (err) {
         console.error("Error unlocking in DB:", err);
@@ -714,7 +718,7 @@ export const lockCertificateRecord = async (serialNumber, registeredName) => {
             sql: `UPDATE certificate_downloads SET is_locked = 1 WHERE serial_number = ? OR registered_name = ?`,
             args: [serialNumber || '', registeredName || '']
         });
-        console.log("Successfully locked certificate record in Turso DB!");
+        console.log("Successfully locked certificate record in DB!");
         return true;
     } catch (err) {
         console.error("Error locking in DB:", err);
@@ -753,7 +757,7 @@ export const deleteDownloadLogRecord = async (serialNumber, registeredName) => {
             sql: `DELETE FROM certificate_downloads WHERE serial_number = ? OR registered_name = ?`,
             args: [serialNumber || '', registeredName || '']
         });
-        console.log("Successfully deleted certificate record from Turso DB!");
+        console.log("Successfully deleted certificate record from DB!");
         return true;
     } catch (err) {
         console.error("Error deleting log in DB:", err);
@@ -811,18 +815,29 @@ export const fetchAllDownloadLogs = async () => {
  */
 export const fetchAdminMetrics = async () => {
     const logs = await fetchAllDownloadLogs();
-    const participantsList = fetchParticipantsList();
+    const participantsList = await fetchParticipantsFromDB();
 
     const totalIssued = logs.length;
     const totalParticipants = participantsList.length;
     const remainingParticipants = Math.max(0, totalParticipants - totalIssued);
 
-    const now = new Date();
-    const oneDayAgo = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+    const nowIstIso = getIndianStandardTime();
+    const todayIstDate = nowIstIso.split('T')[0];
+
     const downloadsToday = logs.filter(log => {
         if (!log.downloadTime) return false;
-        const d = new Date(log.downloadTime);
-        return d >= oneDayAgo;
+        try {
+            let logDateStr = '';
+            if (typeof log.downloadTime === 'string' && log.downloadTime.includes('T')) {
+                logDateStr = log.downloadTime.split('T')[0];
+            } else {
+                const d = new Date(log.downloadTime);
+                logDateStr = new Date(d.getTime() + (330 + d.getTimezoneOffset()) * 60 * 1000).toISOString().split('T')[0];
+            }
+            return logDateStr === todayIstDate;
+        } catch (_) {
+            return false;
+        }
     }).length;
 
     const kvkMap = {};
@@ -947,7 +962,7 @@ export const bulkRegisterParticipants = (rawArray) => {
 };
 
 /**
- * Fetch all records from Turso DB and trigger Excel download.
+ * Fetch all records from Database and trigger Excel download.
  */
 export const exportDBToExcel = async (logsToExport = null) => {
     const logs = logsToExport || await fetchAllDownloadLogs();
@@ -1007,7 +1022,7 @@ export const exportDBToExcel = async (logsToExport = null) => {
 };
 
 /**
- * Fetch Organizations & Categories from Turso DB (ATARI Zone, ICAR Institute, SAU, CAU, KVK)
+ * Fetch Organizations & Categories from Database (ATARI Zone, ICAR Institute, SAU, CAU, KVK)
  */
 export const fetchOrganizationsList = async (categoryFilter = null) => {
     const db = getDb();
@@ -1033,13 +1048,13 @@ export const fetchOrganizationsList = async (categoryFilter = null) => {
             name: row.full_name || row.short_name || ''
         }));
     } catch (err) {
-        console.error("Error fetching organizations from Turso DB:", err);
+        console.error("Error fetching organizations from Database:", err);
         return [];
     }
 };
 
 /**
- * Add a new Organization / Category entry to Turso DB
+ * Add a new Organization / Category entry to Database
  */
 export const addOrganizationRecord = async (orgData) => {
     const db = getDb();
@@ -1059,7 +1074,7 @@ export const addOrganizationRecord = async (orgData) => {
                 getIndianStandardTime()
             ]
         });
-        console.log("Successfully added new organization record with IST timestamp to Turso DB!");
+        console.log("Successfully added new organization record with IST timestamp to Database!");
         return true;
     } catch (err) {
         console.error("Error adding organization record:", err);
@@ -1068,7 +1083,7 @@ export const addOrganizationRecord = async (orgData) => {
 };
 
 /**
- * Delete an Organization entry from Turso DB
+ * Delete an Organization entry from Database
  */
 export const deleteOrganizationRecord = async (id) => {
     const db = getDb();
@@ -1079,7 +1094,7 @@ export const deleteOrganizationRecord = async (id) => {
             sql: `DELETE FROM organizations WHERE id = ?`,
             args: [id]
         });
-        console.log("Successfully deleted organization record from Turso DB!");
+        console.log("Successfully deleted organization record from Database!");
         return true;
     } catch (err) {
         console.error("Error deleting organization record:", err);
@@ -1097,7 +1112,7 @@ export const deleteOrganizationRecordsBatch = async (ids) => {
             sql: `DELETE FROM organizations WHERE id IN (${placeholders})`,
             args: ids
         });
-        console.log(`Successfully batch deleted ${ids.length} organizations from Turso DB!`);
+        console.log(`Successfully batch deleted ${ids.length} organizations from Database!`);
         return true;
     } catch (err) {
         console.error("Error batch deleting organizations:", err);
@@ -1106,7 +1121,7 @@ export const deleteOrganizationRecordsBatch = async (ids) => {
 };
 
 /**
- * Bulk Register Organizations / Institutes in Turso DB
+ * Bulk Register Organizations / Institutes in Database
  */
 export const bulkRegisterOrganizations = async (rawArray) => {
     const db = getDb();
@@ -1158,7 +1173,7 @@ export const bulkRegisterOrganizations = async (rawArray) => {
 };
 
 /**
- * Fetch superadmin password from Turso DB
+ * Fetch superadmin password from Database
  */
 export const fetchAdminPasswordFromDB = async () => {
     const db = getDb();
@@ -1170,13 +1185,13 @@ export const fetchAdminPasswordFromDB = async () => {
             return res.rows[0].password_hash.toString();
         }
     } catch (e) {
-        console.error("Error fetching admin password from Turso DB:", e);
+        console.error("Error fetching admin password from Database:", e);
     }
     return null;
 };
 
 /**
- * Update superadmin password in Turso DB
+ * Update superadmin password in Database
  */
 export const updateAdminPasswordInDB = async (newPassword) => {
     const db = getDb();
@@ -1215,7 +1230,7 @@ export const submitSupportTicket = async (ticketData) => {
                 getIndianStandardTime()
             ]
         });
-        console.log("Successfully submitted support ticket to Turso!");
+        console.log("Successfully submitted support ticket to Database!");
         return true;
     } catch (err) {
         console.error("Error updating support ticket:", err);

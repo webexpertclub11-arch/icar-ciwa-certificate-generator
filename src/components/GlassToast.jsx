@@ -4,7 +4,7 @@ import './GlassToast.css';
 /**
  * Glassmorphism Loader Overlay Component
  */
-export const GlassLoader = ({ isLoading, message = "Refreshing Database Records...", subtext = "Syncing Turso DB & Participant Registries" }) => {
+export const GlassLoader = ({ isLoading, message = "Refreshing Database Records...", subtext = "Syncing Database & Participant Registries" }) => {
   if (!isLoading) return null;
 
   return (
