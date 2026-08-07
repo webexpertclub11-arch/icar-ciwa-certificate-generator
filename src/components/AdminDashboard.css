@@ -736,14 +736,17 @@
 }
 
 .progress-pct-number {
-  font-size: 40px;
+  font-size: 38px;
   font-weight: 900;
-  line-height: 1;
-  letter-spacing: -2px;
+  line-height: 1.1;
+  letter-spacing: -1.5px;
   font-family: 'Outfit', sans-serif;
-  background: linear-gradient(135deg, #2563eb 0%, #059669 100%);
-  /* -webkit-background-clip: text; */
+  color: #1e40af;
+  background: linear-gradient(135deg, #1d4ed8 0%, #059669 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
+  display: block;
   transition: transform 0.25s ease;
 }
 
@@ -752,12 +755,13 @@
 }
 
 .progress-pct-sub {
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 800;
+  color: #475569;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-top: 2px;
+  letter-spacing: 0.8px;
+  margin-top: 4px;
+  display: block;
 }
 
 .progress-track-large {
