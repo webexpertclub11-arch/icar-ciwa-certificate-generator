@@ -228,7 +228,7 @@ export const fetchParticipantsFromDB = async () => {
 
     try {
         const dbParticipants = await db.execute("SELECT * FROM participants ORDER BY name ASC");
-        if (dbParticipants.rows && dbParticipants.rows.length > 0) {
+        if (dbParticipants.rows) {
             const formattedList = dbParticipants.rows.map(row => ({
                 id: String(row.id || row.participant_id),
                 name: row.name,
@@ -513,12 +513,16 @@ export const updateParticipantRecord = (id, updatedData) => {
 export const checkCertificateLockStatus = async (serialNumber, registeredName) => {
     // 1. Check DB First for Real-time Truth
     const db = getDb();
+    let dbQuerySucceeded = false;
+
     if (db) {
         try {
             const result = await db.execute({
                 sql: `SELECT * FROM certificate_downloads WHERE serial_number = ? OR registered_name = ? ORDER BY download_time DESC LIMIT 1`,
                 args: [serialNumber || '', registeredName || '']
             });
+
+            dbQuerySucceeded = true;
 
             if (result.rows && result.rows.length > 0) {
                 const row = result.rows[0];
@@ -545,10 +549,22 @@ export const checkCertificateLockStatus = async (serialNumber, registeredName) =
                 } catch (e) { }
 
                 return dbRecord;
+            } else {
+                // Remove local cache if DB has no record but query succeeded
+                try {
+                    localStorage.removeItem(`icar_cert_lock_${serialNumber}`);
+                    if (registeredName) {
+                        localStorage.removeItem(`icar_cert_lock_user_${registeredName.toLowerCase()}`);
+                    }
+                } catch (e) { }
             }
         } catch (err) {
             console.error("Error checking lock status in DB:", err);
         }
+    }
+
+    if (dbQuerySucceeded) {
+        return null; // DB is the source of truth, no record means not locked. 
     }
 
     // 2. Fallback to LocalStorage
@@ -771,6 +787,7 @@ export const deleteDownloadLogRecord = async (serialNumber, registeredName) => {
 export const fetchAllDownloadLogs = async () => {
     const db = getDb();
     let dbLogs = [];
+    let isDbSuccess = false;
 
     if (db) {
         try {
@@ -789,22 +806,22 @@ export const fetchAllDownloadLogs = async () => {
                 isLocked: row.is_locked === 1 || row.is_locked === '1' || row.is_locked === true,
                 downloadTime: row.download_time
             }));
+            isDbSuccess = true;
+            try {
+                localStorage.setItem('icar_all_local_download_logs', JSON.stringify(dbLogs));
+            } catch (e) { }
         } catch (err) {
             console.error("Error fetching DB logs:", err);
         }
     }
 
+    if (isDbSuccess) {
+        return dbLogs;
+    }
+
     try {
         const localLogsRaw = localStorage.getItem('icar_all_local_download_logs');
-        const localLogs = localLogsRaw ? JSON.parse(localLogsRaw) : [];
-
-        const mergedMap = new Map();
-        [...dbLogs, ...localLogs].forEach(item => {
-            if (item.serialNumber && !mergedMap.has(item.serialNumber)) {
-                mergedMap.set(item.serialNumber, item);
-            }
-        });
-        return Array.from(mergedMap.values());
+        return localLogsRaw ? JSON.parse(localLogsRaw) : [];
     } catch (e) {
         return dbLogs;
     }
