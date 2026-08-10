@@ -24,7 +24,10 @@ const UserDashboard = ({
   const [remainingSeconds, setRemainingSeconds] = useState(600);
 
   useEffect(() => {
-    setAnnouncements(getAnnouncements());
+    const fetchAnnouncements = async () => {
+      setAnnouncements(await getAnnouncements());
+    };
+    fetchAnnouncements();
 
     const handleSettingsUpdate = () => {
       setSettingsVersion(v => v + 1);

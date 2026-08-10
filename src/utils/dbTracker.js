@@ -13,7 +13,7 @@ export const getIndianStandardTime = () => {
 };
 
 // Get Backend SQL-to-Mongo Proxy Database client
-const getDb = () => {
+export const getDb = () => {
     try {
         return {
             execute: async (queryOrObj) => {
@@ -210,6 +210,17 @@ export const initializeDB = async () => {
                 issue_description TEXT,
                 status TEXT DEFAULT 'pending',
                 created_at TEXT
+            )
+        `);
+
+        // Create training_announcements table
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS training_announcements (
+                id TEXT PRIMARY KEY,
+                title TEXT,
+                description TEXT,
+                status TEXT DEFAULT 'live',
+                date TEXT
             )
         `);
 

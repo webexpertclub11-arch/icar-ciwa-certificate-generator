@@ -42,6 +42,9 @@ async function connectToMongo() {
         const adminAuth = db.collection('admin_auth');
         await adminAuth.createIndex({ role: 1 }, { unique: true });
 
+        const trainingAnnouncements = db.collection('training_announcements');
+        await trainingAnnouncements.createIndex({ id: 1 }, { unique: true });
+
         const adminCheck = await adminAuth.findOne({ role: 'superadmin' });
         const initPass = process.env.VITE_INITIAL_ADMIN_PASSWORD || 'secureadminpass123';
         if (!adminCheck) {
@@ -286,6 +289,45 @@ app.post('/api/sql', async (req, res) => {
         }
         if (sql.startsWith("UPDATE SUPPORT_TICKETS SET STATUS = ? WHERE ID = ?")) {
             await db.collection('support_tickets').updateOne({ _id: new ObjectId(args[1]) }, { $set: { status: args[0] } });
+            return res.json({ rows: [] });
+        }
+
+        // TRAINING ANNOUNCEMENTS
+        if (sql.includes("SELECT * FROM TRAINING_ANNOUNCEMENTS ORDER BY DATE DESC")) {
+            const rows = await db.collection('training_announcements').find().sort({ date: -1 }).toArray();
+            return res.json({ rows });
+        }
+        if (sql.includes("INSERT OR REPLACE INTO TRAINING_ANNOUNCEMENTS")) {
+            await db.collection('training_announcements').updateOne(
+                { id: String(args[0]) },
+                {
+                    $set: {
+                        id: String(args[0]),
+                        title: args[1],
+                        description: args[2],
+                        status: args[3],
+                        date: args[4]
+                    }
+                },
+                { upsert: true }
+            );
+            return res.json({ rows: [] });
+        }
+        if (sql.startsWith("UPDATE TRAINING_ANNOUNCEMENTS SET TITLE")) {
+            await db.collection('training_announcements').updateOne(
+                { id: String(args[3]) },
+                {
+                    $set: {
+                        title: args[0],
+                        description: args[1],
+                        status: args[2]
+                    }
+                }
+            );
+            return res.json({ rows: [] });
+        }
+        if (sql.startsWith("DELETE FROM TRAINING_ANNOUNCEMENTS WHERE ID")) {
+            await db.collection('training_announcements').deleteOne({ id: String(args[0]) });
             return res.json({ rows: [] });
         }
 

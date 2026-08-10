@@ -1,23 +1,33 @@
+import { getDb } from './dbTracker';
+
 const ANNOUNCEMENTS_STORAGE_KEY = 'icar_training_announcements_v1';
 
-const defaultAnnouncements = [
-    {
-        id: '1',
-        title: 'Training Programme Session Day 2 Active',
-        description: 'Live practical modules and institute presentations are currently underway for KVK coordinators.',
-        status: 'live', // 'live' or 'completed'
-        date: new Date().toISOString()
-    },
-    {
-        id: '2',
-        title: 'Certificate Verification Window Open',
-        description: 'All participant certificates generated are dynamically verifiable via encoded QR code scanner.',
-        status: 'completed',
-        date: new Date(Date.now() - 86400000).toISOString()
-    }
-];
 
-export const getAnnouncements = () => {
+
+export const getAnnouncements = async () => {
+    // Try Database First
+    const db = getDb();
+    if (db) {
+        try {
+            const result = await db.execute("SELECT * FROM training_announcements ORDER BY date DESC");
+            if (result.rows && result.rows.length > 0) {
+                const dbAnnouncements = result.rows.map(row => ({
+                    id: String(row.id),
+                    title: row.title,
+                    description: row.description,
+                    status: row.status,
+                    date: row.date
+                }));
+                // sync to localstorage
+                saveAnnouncementsLocal(dbAnnouncements);
+                return dbAnnouncements;
+            }
+        } catch (e) {
+            console.warn("Error reading announcements from db:", e);
+        }
+    }
+
+    // Fallback to localstorage
     try {
         const stored = localStorage.getItem(ANNOUNCEMENTS_STORAGE_KEY);
         if (stored) {
@@ -26,10 +36,10 @@ export const getAnnouncements = () => {
     } catch (e) {
         console.warn("Error reading announcements:", e);
     }
-    return defaultAnnouncements;
+    return [];
 };
 
-export const saveAnnouncements = (announcements) => {
+const saveAnnouncementsLocal = (announcements) => {
     try {
         localStorage.setItem(ANNOUNCEMENTS_STORAGE_KEY, JSON.stringify(announcements));
         return true;
@@ -39,30 +49,79 @@ export const saveAnnouncements = (announcements) => {
     }
 };
 
-export const addAnnouncement = (newAnnouncement) => {
-    const list = getAnnouncements();
+export const saveAnnouncements = async (announcements) => {
+    saveAnnouncementsLocal(announcements);
+    return true;
+};
+
+export const addAnnouncement = async (newAnnouncement) => {
+    const list = await getAnnouncements();
     const item = {
         id: Date.now().toString(),
-        title: newAnnouncement.title.trim(),
-        description: newAnnouncement.description.trim(),
+        title: (newAnnouncement.title || '').trim(),
+        description: (newAnnouncement.description || newAnnouncement.message || '').trim(),
         status: newAnnouncement.status || 'live',
         date: new Date().toISOString()
     };
     const updated = [item, ...list];
-    saveAnnouncements(updated);
+    saveAnnouncementsLocal(updated);
+
+    // Save to Database
+    const db = getDb();
+    if (db) {
+        try {
+            await db.execute({
+                sql: `INSERT OR REPLACE INTO training_announcements (id, title, description, status, date) VALUES (?, ?, ?, ?, ?)`,
+                args: [item.id, item.title, item.description, item.status, item.date]
+            });
+        } catch (e) {
+            console.error("Error inserting announcement to DB:", e);
+        }
+    }
+
     return updated;
 };
 
-export const updateAnnouncement = (id, updatedFields) => {
-    const list = getAnnouncements();
+export const updateAnnouncement = async (id, updatedFields) => {
+    const list = await getAnnouncements();
     const updated = list.map(item => item.id === id ? { ...item, ...updatedFields } : item);
-    saveAnnouncements(updated);
+    saveAnnouncementsLocal(updated);
+
+    // It's uncommon to use this but adding DB support safely
+    const db = getDb();
+    if (db) {
+        const target = updated.find(item => item.id === id);
+        if (target) {
+            try {
+                await db.execute({
+                    sql: `UPDATE training_announcements SET title=?, description=?, status=? WHERE id=?`,
+                    args: [target.title, target.description, target.status, id]
+                });
+            } catch (e) {
+                console.error("Error updating announcement in DB:", e);
+            }
+        }
+    }
     return updated;
 };
 
-export const deleteAnnouncement = (id) => {
-    const list = getAnnouncements();
+export const deleteAnnouncement = async (id) => {
+    const list = await getAnnouncements();
     const updated = list.filter(item => item.id !== id);
-    saveAnnouncements(updated);
+    saveAnnouncementsLocal(updated);
+
+    // Delete from Database
+    const db = getDb();
+    if (db) {
+        try {
+            await db.execute({
+                sql: `DELETE FROM training_announcements WHERE id = ?`,
+                args: [id]
+            });
+        } catch (e) {
+            console.error("Error deleting announcement from DB:", e);
+        }
+    }
+
     return updated;
 };

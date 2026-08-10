@@ -290,7 +290,7 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
       setSupportTickets(supportData);
       setParticipants(pList);
       setCertSettings(getCertificateSettings());
-      setAnnouncements(getAnnouncements());
+      setAnnouncements(await getAnnouncements());
       setParticipantPermissions(getParticipantPermissions());
 
       setNewSerialNumber(getNextAutoSerialNumber(pList));
@@ -855,14 +855,14 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
   };
 
   // Announcements Handlers
-  const handleCreateAnnouncement = (e) => {
+  const handleCreateAnnouncement = async (e) => {
     e.preventDefault();
     if (!newAnnouncementTitle.trim() || !newAnnouncementMessage.trim()) {
       alert("Please provide title and message for announcement.");
       return;
     }
 
-    const updated = addAnnouncement({
+    const updated = await addAnnouncement({
       title: newAnnouncementTitle.trim(),
       message: newAnnouncementMessage.trim(),
       status: 'live'
@@ -874,9 +874,9 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
     alert("Training Announcement published successfully!");
   };
 
-  const handleDeleteAnnouncementItem = (id) => {
+  const handleDeleteAnnouncementItem = async (id) => {
     if (window.confirm("Delete this training announcement?")) {
-      const updated = deleteAnnouncement(id);
+      const updated = await deleteAnnouncement(id);
       setAnnouncements(updated);
     }
   };
