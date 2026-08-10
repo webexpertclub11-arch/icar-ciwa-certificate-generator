@@ -259,6 +259,45 @@ export default async function handler(req, res) {
             return res.status(200).json({ rows: [] });
         }
 
+        // TRAINING ANNOUNCEMENTS
+        if (sql.includes("SELECT * FROM TRAINING_ANNOUNCEMENTS ORDER BY DATE DESC")) {
+            const rows = await db.collection('training_announcements').find().sort({ date: -1 }).toArray();
+            return res.status(200).json({ rows });
+        }
+        if (sql.includes("INSERT OR REPLACE INTO TRAINING_ANNOUNCEMENTS")) {
+            await db.collection('training_announcements').updateOne(
+                { id: String(args[0]) },
+                {
+                    $set: {
+                        id: String(args[0]),
+                        title: args[1],
+                        description: args[2],
+                        status: args[3],
+                        date: args[4]
+                    }
+                },
+                { upsert: true }
+            );
+            return res.status(200).json({ rows: [] });
+        }
+        if (sql.startsWith("UPDATE TRAINING_ANNOUNCEMENTS SET TITLE")) {
+            await db.collection('training_announcements').updateOne(
+                { id: String(args[3]) },
+                {
+                    $set: {
+                        title: args[0],
+                        description: args[1],
+                        status: args[2]
+                    }
+                }
+            );
+            return res.status(200).json({ rows: [] });
+        }
+        if (sql.startsWith("DELETE FROM TRAINING_ANNOUNCEMENTS WHERE ID")) {
+            await db.collection('training_announcements').deleteOne({ id: String(args[0]) });
+            return res.status(200).json({ rows: [] });
+        }
+
         if (sql.includes("INSERT INTO ORGANIZATIONS_TEMP")) {
             return res.status(200).json({ rows: [] });
         }
