@@ -234,9 +234,25 @@ export default async function handler(req, res) {
             return res.status(200).json({ rows: config ? [config] : [] });
         }
         if (sql.includes("INSERT OR REPLACE INTO SYSTEM_CONFIG") || sql.includes("INSERT INTO SYSTEM_CONFIG")) {
+            let parsedObj = {};
+            try {
+                parsedObj = typeof args[0] === 'string' ? JSON.parse(args[0]) : args[0];
+            } catch (_) {}
             await db.collection('system_config').updateOne(
                 { key: 'certificate_settings' },
-                { $set: { value: args[0], updated_at: new Date().toISOString() } },
+                { 
+                    $set: { 
+                        value: typeof args[0] === 'string' ? args[0] : JSON.stringify(args[0]), 
+                        download_enabled: parsedObj.downloadEnabled !== undefined ? parsedObj.downloadEnabled : true,
+                        schedule_enabled: parsedObj.scheduleEnabled !== undefined ? parsedObj.scheduleEnabled : false,
+                        schedule_start: parsedObj.scheduleStart || '',
+                        schedule_end: parsedObj.scheduleEnd || '',
+                        director_name: parsedObj.directorName || '',
+                        training_dates: parsedObj.trainingDates || '',
+                        closed_message: parsedObj.closedMessage || '',
+                        updated_at: new Date().toISOString() 
+                    } 
+                },
                 { upsert: true }
             );
             return res.status(200).json({ rows: [] });

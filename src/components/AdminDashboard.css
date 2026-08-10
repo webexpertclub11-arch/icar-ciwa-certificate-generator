@@ -816,6 +816,16 @@
   gap: 7px;
   font-size: 13px;
   color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 6px;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.breakdown-stat-item:hover {
+  background: #f1f5f9;
+  transform: translateY(-1px);
 }
 
 .breakdown-stat-item strong {
@@ -864,14 +874,38 @@
   background: #ffffff;
   border: 1.5px solid #dce8fb;
   border-radius: var(--radius-lg);
-  padding: 22px;
+  padding: 16px 20px;
   display: flex;
   flex-direction: column;
   position: relative;
   overflow: hidden;
   box-shadow: var(--shadow-card);
   transition: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-  cursor: default;
+  cursor: pointer;
+  user-select: none;
+}
+
+.metric-stat-box:active {
+  transform: scale(0.985);
+}
+
+.stat-card-click-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-blue);
+  background: rgba(37, 99, 235, 0.08);
+  padding: 3px 10px;
+  border-radius: 20px;
+  transition: all 0.2s ease;
+}
+
+.metric-stat-box:hover .stat-card-click-hint {
+  background: var(--accent-blue);
+  color: #ffffff;
+  transform: translateX(2px);
 }
 
 /* Base Hover Glow */
@@ -950,8 +984,8 @@
   height: 5px;
   background: #e8edf6;
   border-radius: 8px;
-  margin-top: 12px;
-  margin-bottom: 4px;
+  margin-top: 10px;
+  margin-bottom: 8px;
   overflow: hidden;
 }
 
@@ -987,11 +1021,11 @@
 }
 
 .stat-value-text {
-  font-size: 38px;
+  font-size: 32px;
   font-weight: 900;
   color: var(--text-primary);
   line-height: 1;
-  letter-spacing: -1.5px;
+  letter-spacing: -1px;
   font-family: 'Outfit', sans-serif;
   transition: transform 0.2s ease;
 }
@@ -1003,11 +1037,11 @@
 .stat-sub-badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  margin-top: 12px;
-  font-size: 11.5px;
+  gap: 4px;
+  margin-top: 0;
+  font-size: 11px;
   font-weight: 700;
-  padding: 4px 12px;
+  padding: 3px 10px;
   border-radius: 20px;
   width: fit-content;
   transition: all 0.2s ease;
@@ -1367,11 +1401,73 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 10px;
+  padding: 4px 10px;
   border-radius: 20px;
   font-size: 11.5px;
   font-weight: 700;
   border: 1px solid transparent;
+}
+
+.badge-pending {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
+/* User Cell & Avatar */
+.table-user-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-avatar-initials {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.user-text-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.meta-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.meta-sub {
+  color: var(--text-tertiary);
+}
+
+.serial-badge {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  color: #334155;
+  font-size: 11.5px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+.category-tag-pill {
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid #bfdbfe;
 }
 
 .badge-locked {
@@ -1529,6 +1625,39 @@
   max-height: 90vh;
   overflow-y: auto;
   animation: modalScaleUp 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modal-card-admin.modal-card-drilldown {
+  max-width: 1180px;
+  width: 95vw;
+  max-height: 92vh;
+  overflow-y: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.drilldown-toolbar-flex {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.drilldown-search-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 340px;
+  flex-wrap: wrap;
+}
+
+.drilldown-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 @keyframes modalScaleUp {

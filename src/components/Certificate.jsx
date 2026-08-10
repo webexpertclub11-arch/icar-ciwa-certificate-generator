@@ -6,6 +6,7 @@ import icarRightLogo from '../assets/icarlogoright.gif';
 import certificateHead from '../assets/certificate head.png';
 import defaultDirectorSign from '../assets/director sign.png';
 import { getCertificateSettings, getEffectiveTrainingDates } from '../utils/certificateSettings';
+import { fetchOrganizationsList } from '../utils/dbTracker';
 
 
 const Certificate = React.forwardRef(({ salutation = '', name, instituteName, atariZone, serialNumber, trainingDates, customSettings, category }, ref) => {
@@ -24,9 +25,8 @@ const Certificate = React.forwardRef(({ salutation = '', name, instituteName, at
   const [resolvedZoneFullName, setResolvedZoneFullName] = useState('');
 
   useEffect(() => {
-    import('../utils/dbTracker').then(({ fetchOrganizationsList }) => {
-      fetchOrganizationsList().then(orgs => {
-        if (!orgs || orgs.length === 0) return;
+    fetchOrganizationsList().then(orgs => {
+      if (!orgs || orgs.length === 0) return;
 
         const targetInst = (instituteName || '').trim().toLowerCase();
         const targetZone = (atariZone || '').trim();
@@ -65,7 +65,6 @@ const Certificate = React.forwardRef(({ salutation = '', name, instituteName, at
 
         setResolvedZoneFullName('');
       });
-    });
   }, [instituteName, atariZone]);
 
   const displayZone = resolvedZoneFullName || atariZone || 'ICAR-Agricultural Technology Application Research Institute, Zone I, Ludhiana';

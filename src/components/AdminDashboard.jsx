@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import './AdminDashboard.css';
 import ciwaLogo from '../assets/leftsidelogo.png';
 import defaultDirectorSign from '../assets/director sign.png';
+import * as XLSX from 'xlsx';
 import {
   fetchAdminMetrics,
   fetchAllDownloadLogs,
@@ -28,6 +29,7 @@ import {
 import {
   getCertificateSettings,
   saveCertificateSettings,
+  fetchCertificateSettingsFromDB,
   getParticipantPermissions,
   isParticipantDownloadEnabled,
   setParticipantDownloadStatus,
@@ -158,6 +160,13 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
   const [confirmAdminPassword, setConfirmAdminPassword] = useState('');
   const [passwordMsg, setPasswordMsg] = useState({ text: '', type: '' });
 
+  // Drilldown Modal State for 4 Count Modules
+  const [drilldownModal, setDrilldownModal] = useState(null); // { type: 'issued' | 'registered' | 'pending' | 'today', title: string, subtitle: string }
+  const [drilldownSearchQuery, setDrilldownSearchQuery] = useState('');
+  const [drilldownCategoryFilter, setDrilldownCategoryFilter] = useState('');
+  const [drilldownPage, setDrilldownPage] = useState(1);
+  const [drilldownItemsPerPage, setDrilldownItemsPerPage] = useState(15);
+
   // Organizations & Categories State
   const [organizationsList, setOrganizationsList] = useState([]);
   const [selectedOrgIds, setSelectedOrgIds] = useState(new Set());
@@ -278,19 +287,20 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
     }
     setLoading(true);
     try {
-      const [metricsData, logsData, orgsData, supportData, pList] = await Promise.all([
+      const [metricsData, logsData, orgsData, supportData, pList, dbSettings] = await Promise.all([
         fetchAdminMetrics(),
         fetchAllDownloadLogs(),
         fetchOrganizationsList(),
         fetchAllSupportTickets(),
-        fetchParticipantsFromDB()
+        fetchParticipantsFromDB(),
+        fetchCertificateSettingsFromDB()
       ]);
       setMetrics(metricsData);
       setLogs(logsData);
       setOrganizationsList(orgsData);
       setSupportTickets(supportData);
       setParticipants(pList);
-      setCertSettings(getCertificateSettings());
+      setCertSettings(dbSettings || getCertificateSettings());
       setAnnouncements(await getAnnouncements());
       setParticipantPermissions(getParticipantPermissions());
 
@@ -883,14 +893,14 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
   };
 
   // Settings Handlers
-  const handleSaveSettings = (e) => {
+  const handleSaveSettings = async (e) => {
     e.preventDefault();
-    const result = saveCertificateSettings(certSettings);
+    const result = await saveCertificateSettings(certSettings);
     if (result.success) {
       setCertSettings(result.settings);
-      setSettingsSaveMsg({ text: "✓ Certificate layout and Director settings saved successfully!", type: "success" });
+      setSettingsSaveMsg({ text: "✓ Certificate layout and Master Download settings saved permanently to Database!", type: "success" });
     } else {
-      setSettingsSaveMsg({ text: "Failed to save settings.", type: "danger" });
+      setSettingsSaveMsg({ text: "Failed to save settings to Database.", type: "danger" });
     }
     setTimeout(() => setSettingsSaveMsg({ text: '', type: '' }), 4000);
   };
@@ -1038,6 +1048,330 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
     const start = (participantCurrentPage - 1) * participantItemsPerPage;
     return filteredParticipants.slice(start, start + participantItemsPerPage);
   }, [filteredParticipants, participantCurrentPage, participantItemsPerPage]);
+
+  // ══════════════════════════════════════════════════════════════
+  // LIVE COMPUTED METRICS (100% Sync with In-Memory State & Modals)
+  // ══════════════════════════════════════════════════════════════
+  const liveMetrics = useMemo(() => {
+    const downloadedMap = new Map();
+    (logs || []).forEach(l => {
+      if (l && l.serialNumber) {
+        downloadedMap.set(l.serialNumber.trim().toUpperCase(), l);
+      }
+    });
+
+    const uniqueIssued = downloadedMap.size;
+    const totalRegistered = (participants || []).length;
+
+    let pendingCount = 0;
+    (participants || []).forEach(p => {
+      const cleanSerial = (p && p.serialNumber ? p.serialNumber : '').trim().toUpperCase();
+      if (!cleanSerial || !downloadedMap.has(cleanSerial)) {
+        pendingCount++;
+      }
+    });
+
+    const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const todayUniqueSerials = new Set();
+    (logs || []).forEach(item => {
+      if (!item || !item.downloadTime || !item.serialNumber) return;
+      try {
+        const logDateIST = new Date(item.downloadTime).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        if (logDateIST === todayIST) {
+          todayUniqueSerials.add(item.serialNumber.trim().toUpperCase());
+        }
+      } catch (_) {}
+    });
+
+    const kvkMap = {};
+    (logs || []).forEach(log => {
+      const kvk = log.kvkName || 'Unspecified KVK';
+      kvkMap[kvk] = (kvkMap[kvk] || 0) + 1;
+    });
+
+    const topKvks = Object.entries(kvkMap)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    return {
+      totalIssued: uniqueIssued,
+      totalParticipants: totalRegistered,
+      remainingParticipants: pendingCount,
+      downloadsToday: todayUniqueSerials.size,
+      topKvks: topKvks.length > 0 ? topKvks : (metrics.topKvks || [])
+    };
+  }, [logs, participants, metrics.topKvks]);
+
+  // ══════════════════════════════════════════════════════════════
+  // 4 COUNT MODULES DRILLDOWN & CATEGORY-WISE EXCEL LOGIC
+  // ══════════════════════════════════════════════════════════════
+  const handleOpenDrilldown = (type) => {
+    setDrilldownSearchQuery('');
+    setDrilldownCategoryFilter('');
+    setDrilldownPage(1);
+
+    if (type === 'issued') {
+      setDrilldownModal({
+        type: 'issued',
+        title: 'Total Certificates Issued',
+        subtitle: 'All participants who have verified and downloaded/locked their official certificate'
+      });
+    } else if (type === 'registered') {
+      setDrilldownModal({
+        type: 'registered',
+        title: 'Registered Participants Roster',
+        subtitle: 'Full database roster of all pre-registered participants and their current status'
+      });
+    } else if (type === 'pending') {
+      setDrilldownModal({
+        type: 'pending',
+        title: 'Pending Certificate Downloads',
+        subtitle: 'Pre-registered participants awaiting certificate generation and download'
+      });
+    } else if (type === 'today') {
+      setDrilldownModal({
+        type: 'today',
+        title: 'Certificates Issued Today (IST)',
+        subtitle: 'Live certificates downloaded today under Indian Standard Time'
+      });
+    }
+  };
+
+  const drilldownRawList = useMemo(() => {
+    if (!drilldownModal || !drilldownModal.type) return [];
+
+    const downloadedMap = new Map();
+    (logs || []).forEach(l => {
+      if (l && l.serialNumber) {
+        downloadedMap.set(l.serialNumber.trim().toUpperCase(), l);
+      }
+    });
+
+    if (drilldownModal.type === 'issued') {
+      return Array.from(downloadedMap.values()).map(item => {
+        const certName = item.certificateName || item.registeredName || 'N/A';
+        const combinedName = item.salutation && item.salutation.trim() ? `${item.salutation.trim()} ${certName}` : certName;
+        return {
+          name: combinedName,
+          registeredName: item.registeredName || '',
+          serialNumber: item.serialNumber || 'N/A',
+          instituteName: item.kvkName || 'N/A',
+          atariZone: item.atariZone || 'N/A',
+          category: item.atariZone || 'N/A',
+          status: item.isLocked ? 'Locked' : 'Issued',
+          downloadTime: item.downloadTime,
+          email: item.email || '',
+          mobile: item.mobile || '',
+          wp: item.wp || item.wp_no || '',
+          trainingDates: item.trainingDates || ''
+        };
+      });
+    }
+
+    if (drilldownModal.type === 'registered') {
+      return (participants || []).map(p => {
+        const cleanSerial = (p.serialNumber || '').trim().toUpperCase();
+        const downloadedLog = downloadedMap.get(cleanSerial);
+        return {
+          name: p.name || 'N/A',
+          registeredName: p.name || '',
+          serialNumber: p.serialNumber || 'N/A',
+          instituteName: p.instituteName || 'N/A',
+          atariZone: p.atariZone || p.category || 'N/A',
+          category: p.category || p.atariZone || 'N/A',
+          status: downloadedLog ? (downloadedLog.isLocked ? 'Locked' : 'Issued') : 'Pending Download',
+          downloadTime: downloadedLog ? downloadedLog.downloadTime : null,
+          email: downloadedLog?.email || '',
+          mobile: downloadedLog?.mobile || '',
+          wp: downloadedLog?.wp || '',
+          trainingDates: p.trainingDates || ''
+        };
+      });
+    }
+
+    if (drilldownModal.type === 'pending') {
+      return (participants || [])
+        .filter(p => {
+          const cleanSerial = (p.serialNumber || '').trim().toUpperCase();
+          return !downloadedMap.has(cleanSerial);
+        })
+        .map(p => ({
+          name: p.name || 'N/A',
+          registeredName: p.name || '',
+          serialNumber: p.serialNumber || 'N/A',
+          instituteName: p.instituteName || 'N/A',
+          atariZone: p.atariZone || p.category || 'N/A',
+          category: p.category || p.atariZone || 'N/A',
+          status: 'Pending Download',
+          downloadTime: null,
+          email: '',
+          mobile: '',
+          wp: '',
+          trainingDates: p.trainingDates || ''
+        }));
+    }
+
+    if (drilldownModal.type === 'today') {
+      const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const uniqueTodayLogs = new Map();
+      (logs || []).forEach(item => {
+        if (!item.downloadTime || !item.serialNumber) return;
+        const logDateIST = new Date(item.downloadTime).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        if (logDateIST === todayIST) {
+          uniqueTodayLogs.set(item.serialNumber.trim().toUpperCase(), item);
+        }
+      });
+      return Array.from(uniqueTodayLogs.values()).map(item => {
+        const certName = item.certificateName || item.registeredName || 'N/A';
+        const combinedName = item.salutation && item.salutation.trim() ? `${item.salutation.trim()} ${certName}` : certName;
+        return {
+          name: combinedName,
+          registeredName: item.registeredName || '',
+          serialNumber: item.serialNumber || 'N/A',
+          instituteName: item.kvkName || 'N/A',
+          atariZone: item.atariZone || 'N/A',
+          category: item.atariZone || 'N/A',
+          status: item.isLocked ? 'Locked' : 'Issued Today',
+          downloadTime: item.downloadTime,
+          email: item.email || '',
+          mobile: item.mobile || '',
+          wp: item.wp || item.wp_no || '',
+          trainingDates: item.trainingDates || ''
+        };
+      });
+    }
+
+    return [];
+  }, [drilldownModal, logs, participants]);
+
+  const filteredDrilldownList = useMemo(() => {
+    const query = (drilldownSearchQuery || '').toLowerCase().trim();
+    const catFilter = (drilldownCategoryFilter || '').trim().toLowerCase();
+
+    return drilldownRawList.filter(item => {
+      const nameMatch = (item.name || '').toLowerCase().includes(query);
+      const regMatch = (item.registeredName || '').toLowerCase().includes(query);
+      const serialMatch = (item.serialNumber || '').toLowerCase().includes(query);
+      const instMatch = (item.instituteName || '').toLowerCase().includes(query);
+      const zoneMatch = (item.atariZone || '').toLowerCase().includes(query);
+      const emailMatch = (item.email || '').toLowerCase().includes(query);
+      const mobileMatch = (item.mobile || '').toLowerCase().includes(query);
+
+      const matchesQuery = !query || (nameMatch || regMatch || serialMatch || instMatch || zoneMatch || emailMatch || mobileMatch);
+
+      const matchesCat = !catFilter ||
+        (item.atariZone && item.atariZone.toLowerCase().includes(catFilter)) ||
+        (item.category && item.category.toLowerCase().includes(catFilter)) ||
+        (item.instituteName && item.instituteName.toLowerCase().includes(catFilter));
+
+      return matchesQuery && matchesCat;
+    });
+  }, [drilldownRawList, drilldownSearchQuery, drilldownCategoryFilter]);
+
+  const totalDrilldownPages = Math.ceil(filteredDrilldownList.length / drilldownItemsPerPage) || 1;
+  const paginatedDrilldownList = useMemo(() => {
+    const start = (drilldownPage - 1) * drilldownItemsPerPage;
+    return filteredDrilldownList.slice(start, start + drilldownItemsPerPage);
+  }, [filteredDrilldownList, drilldownPage, drilldownItemsPerPage]);
+
+  const handleExportDrilldownToExcel = (isCategoryWise = false) => {
+    if (!drilldownModal) return;
+    const dataToExport = isCategoryWise ? drilldownRawList : filteredDrilldownList;
+    if (!dataToExport || dataToExport.length === 0) {
+      alert("No records to export.");
+      return;
+    }
+
+    const workbook = XLSX.utils.book_new();
+
+    const formatRows = (items) => items.map((item, idx) => ({
+      'S.No': idx + 1,
+      'Participant Name': item.name || 'N/A',
+      'Serial Number': item.serialNumber || 'N/A',
+      'Category / ATARI Zone': item.atariZone || item.category || 'N/A',
+      'Institute / KVK Name': item.instituteName || 'N/A',
+      'Status': item.status || 'N/A',
+      'Download Timestamp (IST)': item.downloadTime ? new Date(item.downloadTime).toLocaleString() : 'N/A',
+      'Email Address': item.email || 'N/A',
+      'Mobile Number': item.mobile || 'N/A',
+      'WhatsApp Number': item.wp || 'N/A',
+      'Training Dates': item.trainingDates || 'N/A'
+    }));
+
+    if (isCategoryWise && !drilldownCategoryFilter) {
+      // Group records category-wise
+      const grouped = {};
+      dataToExport.forEach(item => {
+        const cat = (item.atariZone || item.category || 'Uncategorized').trim();
+        if (!grouped[cat]) grouped[cat] = [];
+        grouped[cat].push(item);
+      });
+
+      // Master Summary Sheet
+      const summaryData = Object.entries(grouped).map(([catName, items], index) => ({
+        '#': index + 1,
+        'Category / ATARI Zone': catName,
+        'Total Records': items.length
+      }));
+      summaryData.push({
+        '#': 'TOTAL',
+        'Category / ATARI Zone': 'All Categories Combined',
+        'Total Records': dataToExport.length
+      });
+
+      const summarySheet = XLSX.utils.json_to_sheet(summaryData);
+      summarySheet['!cols'] = [{ wch: 8 }, { wch: 42 }, { wch: 18 }];
+      XLSX.utils.book_append_sheet(workbook, summarySheet, 'Category Summary');
+
+      // All Records Sheet
+      const masterSheet = XLSX.utils.json_to_sheet(formatRows(dataToExport));
+      masterSheet['!cols'] = [
+        { wch: 6 }, { wch: 28 }, { wch: 24 }, { wch: 32 }, { wch: 32 },
+        { wch: 18 }, { wch: 25 }, { wch: 28 }, { wch: 16 }, { wch: 16 }, { wch: 22 }
+      ];
+      XLSX.utils.book_append_sheet(workbook, masterSheet, 'All Records');
+
+      // Individual Sheets per Category
+      const usedSheetNames = new Set(['Category Summary', 'All Records']);
+      Object.entries(grouped).forEach(([catName, items]) => {
+        let safeSheetName = catName
+          .replace(/[:\\/?*\[\]]/g, '')
+          .replace(/KVK,\s*/gi, '')
+          .replace(/ATARI\s*/gi, '')
+          .trim()
+          .slice(0, 31);
+        if (!safeSheetName) safeSheetName = 'Category';
+        let uniqueName = safeSheetName;
+        let counter = 1;
+        while (usedSheetNames.has(uniqueName.toUpperCase())) {
+          uniqueName = safeSheetName.slice(0, 27) + `_${counter}`;
+          counter++;
+        }
+        usedSheetNames.add(uniqueName.toUpperCase());
+
+        const catSheet = XLSX.utils.json_to_sheet(formatRows(items));
+        catSheet['!cols'] = [
+          { wch: 6 }, { wch: 28 }, { wch: 24 }, { wch: 32 }, { wch: 32 },
+          { wch: 18 }, { wch: 25 }, { wch: 28 }, { wch: 16 }, { wch: 16 }, { wch: 22 }
+        ];
+        XLSX.utils.book_append_sheet(workbook, catSheet, uniqueName);
+      });
+    } else {
+      const sheetData = formatRows(dataToExport);
+      const worksheet = XLSX.utils.json_to_sheet(sheetData);
+      worksheet['!cols'] = [
+        { wch: 6 }, { wch: 28 }, { wch: 24 }, { wch: 32 }, { wch: 32 },
+        { wch: 18 }, { wch: 25 }, { wch: 28 }, { wch: 16 }, { wch: 16 }, { wch: 22 }
+      ];
+      const sheetName = (drilldownCategoryFilter || drilldownModal.title || 'Records').replace(/[:\\/?*\[\]]/g, '').slice(0, 31);
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName || 'Records');
+    }
+
+    const catPrefix = drilldownCategoryFilter ? `${drilldownCategoryFilter.replace(/[^a-zA-Z0-9]/g, '_')}_` : '';
+    const cleanFilename = `ICAR_${catPrefix}${drilldownModal.title.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    XLSX.writeFile(workbook, cleanFilename);
+  };
 
   // Tab titles for the topbar
   const tabTitles = {
@@ -1265,7 +1599,7 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
 
               {/* Prominent Live Progress Card */}
               {(() => {
-                const completionPct = metrics.totalParticipants > 0 ? Math.round((metrics.totalIssued / metrics.totalParticipants) * 100) : 0;
+                const completionPct = liveMetrics.totalParticipants > 0 ? Math.round((liveMetrics.totalIssued / liveMetrics.totalParticipants) * 100) : 0;
                 return (
                   <div className="admin-card progress-overview-card">
                     <div className="progress-overview-header">
@@ -1292,25 +1626,25 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
 
                     {/* Progress Quick Breakdown Pills */}
                     <div className="progress-breakdown-row">
-                      <div className="breakdown-stat-item">
+                      <div className="breakdown-stat-item" onClick={() => handleOpenDrilldown('issued')} title="Click to view issued certificates table & export">
                         <span className="breakdown-dot dot-issued"></span>
                         <span className="breakdown-label">Issued & Locked:</span>
-                        <strong>{metrics.totalIssued}</strong>
+                        <strong>{liveMetrics.totalIssued}</strong>
                       </div>
-                      <div className="breakdown-stat-item">
+                      <div className="breakdown-stat-item" onClick={() => handleOpenDrilldown('pending')} title="Click to view pending downloads table & export">
                         <span className="breakdown-dot dot-pending"></span>
                         <span className="breakdown-label">Pending Downloads:</span>
-                        <strong>{metrics.remainingParticipants}</strong>
+                        <strong>{liveMetrics.remainingParticipants}</strong>
                       </div>
-                      <div className="breakdown-stat-item">
+                      <div className="breakdown-stat-item" onClick={() => handleOpenDrilldown('registered')} title="Click to view registered participants table & export">
                         <span className="breakdown-dot dot-total"></span>
                         <span className="breakdown-label">Total Registered:</span>
-                        <strong>{metrics.totalParticipants}</strong>
+                        <strong>{liveMetrics.totalParticipants}</strong>
                       </div>
-                      <div className="breakdown-stat-item">
+                      <div className="breakdown-stat-item" onClick={() => handleOpenDrilldown('today')} title="Click to view today's issued certificates table & export">
                         <span className="breakdown-dot dot-today"></span>
                         <span className="breakdown-label">Issued Today:</span>
-                        <strong>{metrics.downloadsToday}</strong>
+                        <strong>{liveMetrics.downloadsToday}</strong>
                       </div>
                     </div>
                   </div>
@@ -1318,48 +1652,60 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
               })()}
 
               <div className="metrics-grid-4">
-                <div className="metric-stat-box stat-gold">
+                <div className="metric-stat-box stat-gold" onClick={() => handleOpenDrilldown('issued')} title="Click to view table of issued certificates and export to Excel">
                   <span className="stat-label-text">Total Certificates Issued</span>
-                  <span className="stat-value-text">{metrics.totalIssued}</span>
+                  <span className="stat-value-text">{liveMetrics.totalIssued}</span>
                   <div className="stat-mini-progress-track">
                     <div
                       className="stat-mini-progress-fill stat-fill-gold"
-                      style={{ width: `${metrics.totalParticipants > 0 ? Math.round((metrics.totalIssued / metrics.totalParticipants) * 100) : 0}%` }}
+                      style={{ width: `${liveMetrics.totalParticipants > 0 ? Math.round((liveMetrics.totalIssued / liveMetrics.totalParticipants) * 100) : 0}%` }}
                     ></div>
                   </div>
-                  <span className="stat-sub-badge badge-gold">
-                    {metrics.totalParticipants > 0 ? Math.round((metrics.totalIssued / metrics.totalParticipants) * 100) : 0}% Completion
-                  </span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', flexWrap: 'wrap', gap: '6px' }}>
+                    <span className="stat-sub-badge badge-gold">
+                      {liveMetrics.totalParticipants > 0 ? Math.round((liveMetrics.totalIssued / liveMetrics.totalParticipants) * 100) : 0}% Completion
+                    </span>
+                    <span className="stat-card-click-hint">📊 View & Export ➔</span>
+                  </div>
                 </div>
 
-                <div className="metric-stat-box stat-navy">
+                <div className="metric-stat-box stat-navy" onClick={() => handleOpenDrilldown('registered')} title="Click to view roster table and export to Excel">
                   <span className="stat-label-text">Registered Participants</span>
-                  <span className="stat-value-text">{metrics.totalParticipants}</span>
+                  <span className="stat-value-text">{liveMetrics.totalParticipants}</span>
                   <div className="stat-mini-progress-track">
                     <div className="stat-mini-progress-fill stat-fill-blue" style={{ width: '100%' }}></div>
                   </div>
-                  <span className="stat-sub-badge badge-blue">Official Roster</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', flexWrap: 'wrap', gap: '6px' }}>
+                    <span className="stat-sub-badge badge-blue">Official Roster</span>
+                    <span className="stat-card-click-hint">👥 View & Export ➔</span>
+                  </div>
                 </div>
 
-                <div className="metric-stat-box stat-amber-card">
+                <div className="metric-stat-box stat-amber-card" onClick={() => handleOpenDrilldown('pending')} title="Click to view pending downloads table and export to Excel">
                   <span className="stat-label-text">Pending Certificate Downloads</span>
-                  <span className="stat-value-text">{metrics.remainingParticipants}</span>
+                  <span className="stat-value-text">{liveMetrics.remainingParticipants}</span>
                   <div className="stat-mini-progress-track">
                     <div
                       className="stat-mini-progress-fill stat-fill-amber"
-                      style={{ width: `${metrics.totalParticipants > 0 ? Math.round((metrics.remainingParticipants / metrics.totalParticipants) * 100) : 0}%` }}
+                      style={{ width: `${liveMetrics.totalParticipants > 0 ? Math.round((liveMetrics.remainingParticipants / liveMetrics.totalParticipants) * 100) : 0}%` }}
                     ></div>
                   </div>
-                  <span className="stat-sub-badge badge-gold">Awaiting Download</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', flexWrap: 'wrap', gap: '6px' }}>
+                    <span className="stat-sub-badge badge-gold">Awaiting Download</span>
+                    <span className="stat-card-click-hint">⏳ View & Export ➔</span>
+                  </div>
                 </div>
 
-                <div className="metric-stat-box stat-emerald">
+                <div className="metric-stat-box stat-emerald" onClick={() => handleOpenDrilldown('today')} title="Click to view today's issued certificates and export to Excel">
                   <span className="stat-label-text">Issued Today (IST)</span>
-                  <span className="stat-value-text">{metrics.downloadsToday}</span>
+                  <span className="stat-value-text">{liveMetrics.downloadsToday}</span>
                   <div className="stat-mini-progress-track">
-                    <div className="stat-mini-progress-fill stat-fill-emerald" style={{ width: `${metrics.downloadsToday > 0 ? Math.min(100, metrics.downloadsToday * 10) : 0}%` }}></div>
+                    <div className="stat-mini-progress-fill stat-fill-emerald" style={{ width: `${liveMetrics.downloadsToday > 0 ? Math.min(100, liveMetrics.downloadsToday * 10) : 0}%` }}></div>
                   </div>
-                  <span className="stat-sub-badge badge-green">Live Active Today</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', flexWrap: 'wrap', gap: '6px' }}>
+                    <span className="stat-sub-badge badge-green">Live Active</span>
+                    <span className="stat-card-click-hint">⚡ View & Export ➔</span>
+                  </div>
                 </div>
               </div>
 
@@ -1383,9 +1729,9 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {metrics.topKvks && metrics.topKvks.length > 0 ? (
-                        metrics.topKvks.map((kvk, idx) => {
-                          const pct = metrics.totalIssued > 0 ? Math.round((kvk.count / metrics.totalIssued) * 100) : 0;
+                      {liveMetrics.topKvks && liveMetrics.topKvks.length > 0 ? (
+                        liveMetrics.topKvks.map((kvk, idx) => {
+                          const pct = liveMetrics.totalIssued > 0 ? Math.round((kvk.count / liveMetrics.totalIssued) * 100) : 0;
                           return (
                             <tr key={idx}>
                               <td>{idx + 1}</td>
@@ -2573,10 +2919,10 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
                       <input
                         type="checkbox"
                         checked={certSettings.downloadEnabled}
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const updated = { ...certSettings, downloadEnabled: e.target.checked };
                           setCertSettings(updated);
-                          saveCertificateSettings(updated);
+                          await saveCertificateSettings(updated);
                         }}
                         style={{ width: '18px', height: '18px', accentColor: certSettings.downloadEnabled ? '#16a34a' : '#dc2626' }}
                       />
@@ -3009,6 +3355,225 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
               <strong style={{ fontSize: '18px', color: 'var(--accent-emerald)' }}>
                 {zipExportModal.current} / {zipExportModal.total} ({zipExportModal.total > 0 ? Math.round((zipExportModal.current / zipExportModal.total) * 100) : 0}%)
               </strong>
+            </div>
+          </div>
+        )
+      }
+
+      {/* 4 COUNT DRILLDOWN DATA TABLE & CATEGORY-WISE EXCEL MODAL */}
+      {
+        drilldownModal && (
+          <div className="modal-overlay-admin" onClick={() => setDrilldownModal(null)}>
+            <div className="modal-card-admin modal-card-drilldown" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header-flex" style={{ background: '#f8fafc', padding: '24px 30px', borderBottom: '1px solid #e2e8f0', borderRadius: 'var(--radius-xl) var(--radius-xl) 0 0', margin: '-30px -30px 20px -30px' }}>
+                <div>
+                  <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '20px', color: '#0f172a', margin: 0 }}>
+                    {drilldownModal.title}
+                    <span className="status-badge-pill badge-active" style={{ fontSize: '12.5px', padding: '4px 12px' }}>
+                      {filteredDrilldownList.length} {filteredDrilldownList.length === 1 ? 'Record' : 'Records'}
+                    </span>
+                  </h3>
+                  <p style={{ margin: '6px 0 0 0', color: 'var(--text-tertiary)', fontSize: '13.5px' }}>
+                    {drilldownModal.subtitle}
+                  </p>
+                </div>
+                <button className="btn-close-modal" onClick={() => setDrilldownModal(null)} title="Close dialog" style={{ background: '#ffffff', border: '1px solid #cbd5e1', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>✕</button>
+              </div>
+
+              {/* Filter & Action Toolbar */}
+              <div className="drilldown-toolbar-flex">
+                <div className="drilldown-search-group">
+                  <input
+                    type="text"
+                    className="search-input-admin"
+                    placeholder="🔍 Search name, serial, institute, contact..."
+                    value={drilldownSearchQuery}
+                    onChange={(e) => {
+                      setDrilldownSearchQuery(e.target.value);
+                      setDrilldownPage(1);
+                    }}
+                    style={{ minWidth: '220px', flex: 1 }}
+                  />
+
+                  <select
+                    className="select-filter-admin"
+                    value={drilldownCategoryFilter}
+                    onChange={(e) => {
+                      setDrilldownCategoryFilter(e.target.value);
+                      setDrilldownPage(1);
+                    }}
+                    style={{ minWidth: '200px' }}
+                  >
+                    <option value="">🏛️ All Categories & ATARI Zones</option>
+                    <optgroup label="📍 KVK by ATARI Zone">
+                      {categoryFilterOptions.kvkList.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="🏛️ Institutes & Universities">
+                      {categoryFilterOptions.instList.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </div>
+
+                <div className="drilldown-actions-group">
+                  <button
+                    type="button"
+                    className="btn-admin-gold"
+                    onClick={() => handleExportDrilldownToExcel(false)}
+                    title="Export filtered records to Excel sheet"
+                  >
+                    📊 Export Excel ({filteredDrilldownList.length})
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-admin-primary"
+                    onClick={() => handleExportDrilldownToExcel(true)}
+                    title="Download categorized multi-sheet Excel with category breakdown"
+                  >
+                    📑 Category-Wise Export
+                  </button>
+                </div>
+              </div>
+
+              {/* Data Table */}
+              <div className="table-responsive-container" style={{ maxHeight: '52vh', overflowY: 'auto' }}>
+                <table className="admin-data-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '40px' }}>#</th>
+                      <th>Participant Name</th>
+                      <th>Serial Number</th>
+                      <th>Category / ATARI Zone</th>
+                      <th>Institution / KVK Name</th>
+                      <th>Status</th>
+                      <th>Download Time (IST)</th>
+                      <th>Contact Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedDrilldownList.length > 0 ? (
+                      paginatedDrilldownList.map((row, index) => {
+                        const absoluteIndex = (drilldownPage - 1) * drilldownItemsPerPage + index + 1;
+
+                        return (
+                          <tr key={index}>
+                            <td style={{ color: 'var(--text-tertiary)', fontWeight: 600 }}>{absoluteIndex}</td>
+                            <td>
+                              <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{row.name}</div>
+                              {row.registeredName && row.registeredName !== row.name && (
+                                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>Reg: {row.registeredName}</div>
+                              )}
+                            </td>
+                            <td>
+                              <code className="clean-serial-text" style={{ fontSize: '12px', fontWeight: 600 }}>{row.serialNumber}</code>
+                            </td>
+                            <td style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                              {row.atariZone || row.category || '—'}
+                            </td>
+                            <td style={{ fontSize: '12.5px', fontWeight: 500 }}>
+                              {row.instituteName || '—'}
+                            </td>
+                            <td>
+                              {row.status.includes('Locked') ? (
+                                <span className="status-badge-pill badge-locked">🔒 Locked</span>
+                              ) : row.status.includes('Issued') ? (
+                                <span className="status-badge-pill badge-active">🟢 Issued</span>
+                              ) : (
+                                <span className="status-badge-pill badge-pending">⏳ Pending</span>
+                              )}
+                            </td>
+                            <td style={{ fontSize: '12.5px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                              {row.downloadTime ? new Date(row.downloadTime).toLocaleString('en-IN', {
+                                day: '2-digit', month: 'short', year: 'numeric',
+                                hour: '2-digit', minute: '2-digit', hour12: true
+                              }) : '—'}
+                            </td>
+                            <td style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                              {row.email || row.mobile || row.wp ? (
+                                <div>
+                                  {row.email && <div>✉️ {row.email}</div>}
+                                  {(row.mobile || row.wp) && <div>📞 {row.mobile || row.wp}</div>}
+                                </div>
+                              ) : '—'}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan="8" style={{ textAlign: 'center', padding: '36px', color: 'var(--text-tertiary)' }}>
+                          <div style={{ fontSize: '28px', marginBottom: '8px' }}>🔍</div>
+                          <strong>No matching records found.</strong>
+                          <p style={{ fontSize: '13px', margin: '4px 0 0 0' }}>Try adjusting your search query or category filter.</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Controls */}
+              <div className="pagination-bar" style={{ marginTop: '14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                  Showing {filteredDrilldownList.length > 0 ? (drilldownPage - 1) * drilldownItemsPerPage + 1 : 0} to {Math.min(drilldownPage * drilldownItemsPerPage, filteredDrilldownList.length)} of {filteredDrilldownList.length} entries
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                    <span>Rows:</span>
+                    <select
+                      value={drilldownItemsPerPage}
+                      onChange={(e) => {
+                        setDrilldownItemsPerPage(Number(e.target.value));
+                        setDrilldownPage(1);
+                      }}
+                      className="select-filter-admin"
+                      style={{ padding: '3px 8px', height: '30px', minWidth: '65px' }}
+                    >
+                      <option value={10}>10</option>
+                      <option value={15}>15</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+
+                  <div className="pagination-btn-group">
+                    <button
+                      type="button"
+                      className="btn-page"
+                      disabled={drilldownPage <= 1}
+                      onClick={() => setDrilldownPage(p => Math.max(1, p - 1))}
+                    >
+                      ◀ Prev
+                    </button>
+                    <span style={{ fontSize: '13px', fontWeight: 600, padding: '0 8px' }}>
+                      {drilldownPage} / {totalDrilldownPages}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-page"
+                      disabled={drilldownPage >= totalDrilldownPages}
+                      onClick={() => setDrilldownPage(p => Math.min(totalDrilldownPages, p + 1))}
+                    >
+                      Next ▶
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '14px' }}>
+                <button
+                  type="button"
+                  className="btn-admin-outline"
+                  onClick={() => setDrilldownModal(null)}
+                >
+                  Close Window
+                </button>
+              </div>
             </div>
           </div>
         )

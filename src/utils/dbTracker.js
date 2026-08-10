@@ -845,15 +845,32 @@ export const fetchAdminMetrics = async () => {
     const logs = await fetchAllDownloadLogs();
     const participantsList = await fetchParticipantsFromDB();
 
-    const totalIssued = logs.length;
+    const uniqueIssuedSerials = new Set();
+    logs.forEach(l => {
+        if (l && l.serialNumber) {
+            uniqueIssuedSerials.add(l.serialNumber.trim().toUpperCase());
+        }
+    });
+
+    const totalIssued = uniqueIssuedSerials.size;
     const totalParticipants = participantsList.length;
-    const remainingParticipants = Math.max(0, totalParticipants - totalIssued);
+    
+    let remainingParticipants = 0;
+    participantsList.forEach(p => {
+        if (p) {
+            const cleanSerial = (p.serialNumber || '').trim().toUpperCase();
+            if (!uniqueIssuedSerials.has(cleanSerial)) {
+                remainingParticipants++;
+            }
+        }
+    });
 
     const nowIstIso = getIndianStandardTime();
     const todayIstDate = nowIstIso.split('T')[0];
 
-    const downloadsToday = logs.filter(log => {
-        if (!log.downloadTime) return false;
+    const todayUniqueSerials = new Set();
+    logs.forEach(log => {
+        if (!log.downloadTime || !log.serialNumber) return;
         try {
             let logDateStr = '';
             if (typeof log.downloadTime === 'string' && log.downloadTime.includes('T')) {
@@ -862,11 +879,12 @@ export const fetchAdminMetrics = async () => {
                 const d = new Date(log.downloadTime);
                 logDateStr = new Date(d.getTime() + (330 + d.getTimezoneOffset()) * 60 * 1000).toISOString().split('T')[0];
             }
-            return logDateStr === todayIstDate;
-        } catch (_) {
-            return false;
-        }
-    }).length;
+            if (logDateStr === todayIstDate) {
+                todayUniqueSerials.add(log.serialNumber.trim().toUpperCase());
+            }
+        } catch (_) { }
+    });
+    const downloadsToday = todayUniqueSerials.size;
 
     const kvkMap = {};
     logs.forEach(log => {

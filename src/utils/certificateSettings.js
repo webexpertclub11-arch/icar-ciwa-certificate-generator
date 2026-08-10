@@ -1,5 +1,5 @@
 import defaultDirectorSign from '../assets/director sign.png';
-import { updateSystemConfig } from './dbTracker';
+import { updateSystemConfig, fetchSystemConfig } from './dbTracker';
 
 const SETTINGS_STORAGE_KEY = 'icar_certificate_global_settings';
 
@@ -59,7 +59,7 @@ export const getDefaultCertificateSettings = () => ({
 });
 
 /**
- * Get current certificate global settings
+ * Get current certificate global settings from local cache
  */
 export const getCertificateSettings = () => {
     try {
@@ -80,17 +80,41 @@ export const getCertificateSettings = () => {
 };
 
 /**
- * Save certificate global settings
+ * Fetch and sync certificate settings directly from Database
  */
-export const saveCertificateSettings = (newSettings) => {
+export const fetchCertificateSettingsFromDB = async () => {
+    try {
+        const dbConfig = await fetchSystemConfig();
+        if (dbConfig) {
+            const merged = {
+                ...getDefaultCertificateSettings(),
+                ...dbConfig
+            };
+            merged.directorSignatureImage = sanitizeDirectorSignature(merged.directorSignatureImage);
+            localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(merged));
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('icar_settings_updated', { detail: merged }));
+            }
+            return merged;
+        }
+    } catch (e) {
+        console.warn("Error fetching certificate settings from DB:", e);
+    }
+    return getCertificateSettings();
+};
+
+/**
+ * Save certificate global settings permanently to Database and Local Cache
+ */
+export const saveCertificateSettings = async (newSettings) => {
     try {
         const current = getCertificateSettings();
         const updated = { ...current, ...newSettings };
         updated.directorSignatureImage = sanitizeDirectorSignature(updated.directorSignatureImage);
         localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updated));
 
-        // Save to Database asynchronously
-        updateSystemConfig(updated).catch(e => console.error("Database sync error", e));
+        // Save directly to MongoDB Database
+        await updateSystemConfig(updated);
 
         // Dispatch custom event for real-time reactivity across components
         if (typeof window !== 'undefined') {
