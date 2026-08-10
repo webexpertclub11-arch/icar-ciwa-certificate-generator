@@ -3,6 +3,46 @@ import { updateSystemConfig } from './dbTracker';
 
 const SETTINGS_STORAGE_KEY = 'icar_certificate_global_settings';
 
+/**
+ * Validates and normalizes director signature image path/data URL.
+ * Automatically resolves dev paths (/src/...), localhost URLs, old hashes, or missing values to the bundled default asset.
+ */
+export const sanitizeDirectorSignature = (sig) => {
+    if (!sig || typeof sig !== 'string') {
+        return defaultDirectorSign;
+    }
+    const trimmed = sig.trim();
+    if (!trimmed || trimmed === 'DEFAULT' || trimmed === '[object Object]' || trimmed === 'null' || trimmed === 'undefined') {
+        return defaultDirectorSign;
+    }
+    // Base64 custom uploaded image
+    if (trimmed.startsWith('data:image/')) {
+        return trimmed;
+    }
+    // Remote URLs (skip localhost in production)
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+            if (trimmed.includes('localhost') || trimmed.includes('127.0.0.1')) {
+                return defaultDirectorSign;
+            }
+        }
+        return trimmed;
+    }
+    // Development server paths or raw unbundled paths
+    if (trimmed.startsWith('/src/') || trimmed.startsWith('src/') || trimmed.startsWith('/@fs/')) {
+        return defaultDirectorSign;
+    }
+    // Matching default sign asset
+    if (trimmed === defaultDirectorSign) {
+        return defaultDirectorSign;
+    }
+    // Fallback if it refers to default director sign from past builds
+    if (trimmed.includes('director') && (trimmed.includes('sign') || trimmed.includes('png'))) {
+        return defaultDirectorSign;
+    }
+    return trimmed || defaultDirectorSign;
+};
+
 export const getDefaultCertificateSettings = () => ({
     directorSignatureImage: defaultDirectorSign,
     directorName: 'Dr. Mridula Devi',
@@ -26,10 +66,12 @@ export const getCertificateSettings = () => {
         const stored = localStorage.getItem(SETTINGS_STORAGE_KEY);
         if (stored) {
             const parsed = JSON.parse(stored);
-            return {
+            const merged = {
                 ...getDefaultCertificateSettings(),
                 ...parsed
             };
+            merged.directorSignatureImage = sanitizeDirectorSignature(merged.directorSignatureImage);
+            return merged;
         }
     } catch (e) {
         console.warn("Error reading certificate settings:", e);
@@ -44,6 +86,7 @@ export const saveCertificateSettings = (newSettings) => {
     try {
         const current = getCertificateSettings();
         const updated = { ...current, ...newSettings };
+        updated.directorSignatureImage = sanitizeDirectorSignature(updated.directorSignatureImage);
         localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updated));
 
         // Save to Database asynchronously
@@ -65,6 +108,7 @@ export const forceSetCertificateSettings = (newSettings) => {
     try {
         const current = getCertificateSettings();
         const updated = { ...current, ...newSettings };
+        updated.directorSignatureImage = sanitizeDirectorSignature(updated.directorSignatureImage);
         localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updated));
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('icar_settings_updated', { detail: updated }));

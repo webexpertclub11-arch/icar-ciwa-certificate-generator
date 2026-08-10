@@ -195,7 +195,7 @@ function App() {
       fetchSystemConfig().then(config => {
         if (config) {
           forceSetCertificateSettings(config);
-          setCertSettings(config);
+          setCertSettings(getCertificateSettings());
         }
       });
     });

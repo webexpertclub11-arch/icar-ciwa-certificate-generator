@@ -4,6 +4,7 @@ import './Certificate.css';
 import leftSideLogo from '../assets/international_womenfarmer.svg';
 import icarRightLogo from '../assets/icarlogoright.gif';
 import certificateHead from '../assets/certificate head.png';
+import defaultDirectorSign from '../assets/director sign.png';
 import { getCertificateSettings, getEffectiveTrainingDates } from '../utils/certificateSettings';
 
 
@@ -204,9 +205,14 @@ Status: VERIFIED & AUTHENTIC`;
                   </div>
                   <div className="signature-box">
                     <img
-                      src={settings.directorSignatureImage}
+                      src={settings.directorSignatureImage || defaultDirectorSign}
                       alt="Director Signature"
                       className="director-signature-img"
+                      onError={(e) => {
+                        if (e.currentTarget.src !== defaultDirectorSign) {
+                          e.currentTarget.src = defaultDirectorSign;
+                        }
+                      }}
                     />
                     <p className="sig-name">{settings.directorName || 'Dr. Mridula Devi'}</p>
                     <p className="sig-title">{settings.directorTitle || '(Director, ICAR-CIWA)'}</p>

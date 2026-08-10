@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import './AdminDashboard.css';
 import ciwaLogo from '../assets/leftsidelogo.png';
+import defaultDirectorSign from '../assets/director sign.png';
 import {
   fetchAdminMetrics,
   fetchAllDownloadLogs,
@@ -2481,15 +2482,36 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
 
                   <div style={{ display: 'grid', gap: '8px' }}>
                     <label style={{ fontWeight: 600, fontSize: '13.5px' }}>Director Signature Image</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      {certSettings.directorSignatureImage && (
-                        <img
-                          src={certSettings.directorSignatureImage}
-                          alt="Director Signature Preview"
-                          style={{ height: '50px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '4px', background: '#fff' }}
-                        />
-                      )}
-                      <input type="file" accept="image/*" onChange={handleDirectorSignatureUpload} className="input-flex-admin" />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                      <img
+                        src={certSettings.directorSignatureImage || defaultDirectorSign}
+                        alt="Director Signature Preview"
+                        style={{ height: '50px', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '4px', background: '#fff' }}
+                        onError={(e) => {
+                          if (e.currentTarget.src !== defaultDirectorSign) {
+                            e.currentTarget.src = defaultDirectorSign;
+                          }
+                        }}
+                      />
+                      <input type="file" accept="image/*" onChange={handleDirectorSignatureUpload} className="input-flex-admin" style={{ flex: '1 1 200px' }} />
+                      <button
+                        type="button"
+                        onClick={() => setCertSettings({ ...certSettings, directorSignatureImage: defaultDirectorSign })}
+                        style={{
+                          background: '#f8fafc',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '8px',
+                          padding: '8px 12px',
+                          fontSize: '12.5px',
+                          cursor: 'pointer',
+                          color: '#475569',
+                          fontWeight: 600,
+                          whiteSpace: 'nowrap'
+                        }}
+                        title="Restore original ICAR-CIWA Director signature"
+                      >
+                        ↺ Reset to Default
+                      </button>
                     </div>
                   </div>
 
