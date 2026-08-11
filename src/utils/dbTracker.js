@@ -37,6 +37,12 @@ export const getDb = () => {
  * Initialize table if it doesn't exist & add missing columns for lock system
  */
 export const initializeDB = async () => {
+    // Fast-path: Check if we already initialized in this browser to save 40+ SQL queries on dashboard load
+    const isInitialized = localStorage.getItem('icar_db_initialized_v2');
+    if (isInitialized) {
+        return;
+    }
+
     const db = getDb();
     if (!db) return;
 
@@ -224,6 +230,7 @@ export const initializeDB = async () => {
             )
         `);
 
+        localStorage.setItem('icar_db_initialized_v2', 'true');
         console.log("Database checked/initialized successfully!");
     } catch (e) {
         console.error("Failed to initialize DB:", e);

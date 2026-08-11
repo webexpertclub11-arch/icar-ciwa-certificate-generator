@@ -4,7 +4,6 @@ import ciwaLogo from '../assets/leftsidelogo.png';
 import defaultDirectorSign from '../assets/director sign.png';
 import * as XLSX from 'xlsx';
 import {
-  fetchAdminMetrics,
   fetchAllDownloadLogs,
   unlockCertificateRecord,
   lockCertificateRecord,
@@ -287,15 +286,13 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
     }
     setLoading(true);
     try {
-      const [metricsData, logsData, orgsData, supportData, pList, dbSettings] = await Promise.all([
-        fetchAdminMetrics(),
+      const [logsData, orgsData, supportData, pList, dbSettings] = await Promise.all([
         fetchAllDownloadLogs(),
         fetchOrganizationsList(),
         fetchAllSupportTickets(),
         fetchParticipantsFromDB(),
         fetchCertificateSettingsFromDB()
       ]);
-      setMetrics(metricsData);
       setLogs(logsData);
       setOrganizationsList(orgsData);
       setSupportTickets(supportData);
