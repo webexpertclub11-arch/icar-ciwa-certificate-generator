@@ -67,7 +67,7 @@ const getInitials = (name = '') => {
 };
 
 const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
-  const [activeTab, setActiveTab] = useState('logs'); // 'metrics', 'logs', 'participants', 'organizations', 'updates', 'settings', 'security'
+  const [activeTab, setActiveTab] = useState('metrics'); // 'metrics', 'logs', 'participants', 'organizations', 'updates', 'settings', 'security'
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loading, setLoading] = useState(true);
 
@@ -1080,7 +1080,7 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
         if (logDateIST === todayIST) {
           todayUniqueSerials.add(item.serialNumber.trim().toUpperCase());
         }
-      } catch (_) {}
+      } catch (_) { }
     });
 
     const kvkMap = {};
