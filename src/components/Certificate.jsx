@@ -28,43 +28,44 @@ const Certificate = React.forwardRef(({ salutation = '', name, instituteName, at
     fetchOrganizationsList().then(orgs => {
       if (!orgs || orgs.length === 0) return;
 
-        const targetInst = (instituteName || '').trim().toLowerCase();
-        const targetZone = (atariZone || '').trim();
+      const targetInst = (instituteName || '').trim().toLowerCase();
+      const targetZone = (atariZone || '').trim();
 
-        let inferredZone = null;
+      let inferredZone = null;
 
-        if (targetInst) {
-          const cleanInst = targetInst.replace(/[,.-]/g, ' ').replace(/\s+/g, ' ').trim();
-          const foundKVK = orgs.find(o => {
-            const sNameRaw = (o.shortName || '').trim().toLowerCase();
-            const fNameRaw = (o.fullName || '').trim().toLowerCase();
-            return (sNameRaw === targetInst || fNameRaw === targetInst || sNameRaw.replace(/[,.-]/g, ' ') === cleanInst);
-          });
+      if (targetInst) {
+        const cleanInst = targetInst.replace(/[,.-]/g, ' ').replace(/\s+/g, ' ').trim();
+        const foundKVK = orgs.find(o => {
+          const sNameRaw = (o.shortName || '').trim().toLowerCase();
+          const fNameRaw = (o.fullName || '').trim().toLowerCase();
+          return (sNameRaw === targetInst || fNameRaw === targetInst || sNameRaw.replace(/[,.-]/g, ' ') === cleanInst);
+        });
 
-          if (foundKVK && foundKVK.category) {
-            inferredZone = foundKVK.category;
+        if (foundKVK && foundKVK.category) {
+          inferredZone = foundKVK.category;
+        }
+      }
+
+      const zoneToSearch = targetZone || inferredZone;
+      if (zoneToSearch) {
+        const zoneMatch = zoneToSearch.match(/Zone\s+([IVX0-9]+)/i);
+        if (zoneMatch) {
+          const romanNumeral = zoneMatch[1].toUpperCase();
+          const regex = new RegExp(`ZONE\\s+${romanNumeral}\\b`);
+          const foundATARI = orgs.find(o =>
+            regex.test((o.fullName || '').toUpperCase()) ||
+            regex.test((o.shortName || '').toUpperCase())
+          );
+
+          if (foundATARI && foundATARI.fullName) {
+            setResolvedZoneFullName(foundATARI.fullName);
+            return;
           }
         }
+      }
 
-        const zoneToSearch = targetZone || inferredZone;
-        if (zoneToSearch) {
-          const zoneMatch = zoneToSearch.match(/Zone\s+([IVX0-9]+)/i);
-          if (zoneMatch) {
-            const romanNumeral = zoneMatch[1].toUpperCase();
-            const foundATARI = orgs.find(o =>
-              (o.fullName || '').toUpperCase().includes(`ZONE ${romanNumeral}`) ||
-              (o.shortName || '').toUpperCase().includes(`ZONE ${romanNumeral}`)
-            );
-
-            if (foundATARI && foundATARI.fullName) {
-              setResolvedZoneFullName(foundATARI.fullName);
-              return;
-            }
-          }
-        }
-
-        setResolvedZoneFullName('');
-      });
+      setResolvedZoneFullName('');
+    });
   }, [instituteName, atariZone]);
 
   const displayZone = resolvedZoneFullName || atariZone || 'ICAR-Agricultural Technology Application Research Institute, Zone I, Ludhiana';
