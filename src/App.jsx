@@ -1,11 +1,11 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
-import Certificate from './components/Certificate';
-import CertificateForm from './components/CertificateForm';
-import PasswordModal from './components/PasswordModal';
+import React, { useState, useRef, useCallback, useEffect, Suspense, lazy } from 'react';
 import LoginPage from './components/LoginPage';
-import AdminDashboard from './components/AdminDashboard';
-import UserDashboard from './components/UserDashboard';
-import SupportTicketPage from './components/SupportTicketPage';
+
+const Certificate = lazy(() => import('./components/Certificate'));
+const CertificateForm = lazy(() => import('./components/CertificateForm'));
+const AdminDashboard = lazy(() => import('./components/AdminDashboard'));
+const UserDashboard = lazy(() => import('./components/UserDashboard'));
+const SupportTicketPage = lazy(() => import('./components/SupportTicketPage'));
 import { downloadCertificateAsPDF, printCertificate } from './utils/downloadCertificate';
 import { initializeDB, recordDownloadToDB, checkCertificateLockStatus, fetchOrganizationsList, fetchSystemConfig } from './utils/dbTracker';
 import { getCertificateSettings, isParticipantDownloadEnabled, checkDownloadWindowStatus, getParticipantPermissions, forceSetCertificateSettings } from './utils/certificateSettings';
@@ -189,16 +189,22 @@ function App() {
     setIsLoggedIn(true);
   }, [showToast]);
 
-  // Initialize DB table, settings, security guard, and session tokens on mount
+  // Initialize DB table and settings after login to prevent unnecessary SQL calls on login page
   useEffect(() => {
-    initializeDB().then(() => {
-      fetchSystemConfig().then(config => {
-        if (config) {
-          forceSetCertificateSettings(config);
-          setCertSettings(getCertificateSettings());
-        }
+    if (isLoggedIn || isAdminLoggedIn) {
+      initializeDB().then(() => {
+        fetchSystemConfig().then(config => {
+          if (config) {
+            forceSetCertificateSettings(config);
+            setCertSettings(getCertificateSettings());
+          }
+        });
       });
-    });
+    }
+  }, [isLoggedIn, isAdminLoggedIn]);
+
+  // Initialize security guard and check session tokens on mount
+  useEffect(() => {
     setCertSettings(getCertificateSettings());
 
     const cleanupSecurity = initSecurityGuard(
@@ -408,10 +414,12 @@ function App() {
   // Render Admin Dashboard View
   if (isAdminLoggedIn) {
     return (
-      <AdminDashboard
-        onExitAdmin={handleExitAdmin}
-        onPreviewCertificate={handleInspectCertificateFromAdmin}
-      />
+      <Suspense fallback={<div className="app-layout"><div className="toast-notification toast-info"><span>Loading Admin Dashboard...</span></div></div>}>
+        <AdminDashboard
+          onExitAdmin={handleExitAdmin}
+          onPreviewCertificate={handleInspectCertificateFromAdmin}
+        />
+      </Suspense>
     );
   }
 
@@ -425,31 +433,35 @@ function App() {
   // Render User Dashboard View if active tab is 'dashboard'
   if (userActiveTab === 'dashboard') {
     return (
-      <UserDashboard
-        registeredName={registeredName}
-        salutation={salutation}
-        assignedSerialNumber={assignedSerialNumber}
-        contactInfo={participantContact}
-        isLocked={isLocked}
-        downloadTime={downloadTime}
-        onGoToCertificateWorkspace={() => setUserActiveTab('certificate')}
-        onGoToSupport={() => setUserActiveTab('support')}
-        onLogout={handleLogout}
-        isAdminRestricted={isAdminRestricted}
-      />
+      <Suspense fallback={<div className="app-layout"><div className="toast-notification toast-info"><span>Loading Dashboard...</span></div></div>}>
+        <UserDashboard
+          registeredName={registeredName}
+          salutation={salutation}
+          assignedSerialNumber={assignedSerialNumber}
+          contactInfo={participantContact}
+          isLocked={isLocked}
+          downloadTime={downloadTime}
+          onGoToCertificateWorkspace={() => setUserActiveTab('certificate')}
+          onGoToSupport={() => setUserActiveTab('support')}
+          onLogout={handleLogout}
+          isAdminRestricted={isAdminRestricted}
+        />
+      </Suspense>
     );
   }
 
   // Render Support Ticket Page
   if (userActiveTab === 'support') {
     return (
-      <SupportTicketPage
-        assignedSerialNumber={assignedSerialNumber}
-        registeredName={registeredName}
-        contactInfo={participantContact}
-        onExit={handleLogout}
-        isAdminRestricted={isAdminRestricted}
-      />
+      <Suspense fallback={<div className="app-layout"><div className="toast-notification toast-info"><span>Loading Support...</span></div></div>}>
+        <SupportTicketPage
+          assignedSerialNumber={assignedSerialNumber}
+          registeredName={registeredName}
+          contactInfo={participantContact}
+          onExit={handleLogout}
+          isAdminRestricted={isAdminRestricted}
+        />
+      </Suspense>
     );
   }
 
@@ -463,25 +475,27 @@ function App() {
         </div>
       )}
 
-      <CertificateForm
-        salutation={salutation}
-        setSalutation={setSalutation}
-        participantName={participantName}
-        setParticipantName={setParticipantName}
-        instituteName={instituteName}
-        setInstituteName={setInstituteName}
-        selectedZone={selectedZone}
-        setSelectedZone={setSelectedZone}
-        formStep={formStep}
-        setFormStep={setFormStep}
-        onDownloadPDF={handleDownloadPDF}
-        onPrint={handlePrint}
-        isGenerating={isGenerating}
-        isLocked={isLocked}
-        downloadTime={downloadTime}
-        registeredName={registeredName}
-        onGoToDashboard={() => setUserActiveTab('dashboard')}
-      />
+      <Suspense fallback={<div className="toast-notification toast-info" style={{position:'absolute', top:'10px', right:'10px', zIndex:999}}><span>Loading Form...</span></div>}>
+        <CertificateForm
+          salutation={salutation}
+          setSalutation={setSalutation}
+          participantName={participantName}
+          setParticipantName={setParticipantName}
+          instituteName={instituteName}
+          setInstituteName={setInstituteName}
+          selectedZone={selectedZone}
+          setSelectedZone={setSelectedZone}
+          formStep={formStep}
+          setFormStep={setFormStep}
+          onDownloadPDF={handleDownloadPDF}
+          onPrint={handlePrint}
+          isGenerating={isGenerating}
+          isLocked={isLocked}
+          downloadTime={downloadTime}
+          registeredName={registeredName}
+          onGoToDashboard={() => setUserActiveTab('dashboard')}
+        />
+      </Suspense>
 
       <main className="preview-area" ref={previewContainerRef}>
         {/* Simple Text Breadcrumb Toolbar */}
@@ -534,17 +548,19 @@ function App() {
               opacity: isSecurityBlurred ? 0.05 : 1
             }}
           >
-            <Certificate
-              ref={certificateRef}
-              salutation={salutation}
-              name={participantName}
-              instituteName={instituteName}
-              atariZone={selectedZone}
-              serialNumber={assignedSerialNumber}
-              trainingDates={participantTrainingDates}
-              customSettings={certSettings}
-              category={participantCategory}
-            />
+            <Suspense fallback={<div style={{padding:'20px'}}>Loading Certificate Canvas...</div>}>
+              <Certificate
+                ref={certificateRef}
+                salutation={salutation}
+                name={participantName}
+                instituteName={instituteName}
+                atariZone={selectedZone}
+                serialNumber={assignedSerialNumber}
+                trainingDates={participantTrainingDates}
+                customSettings={certSettings}
+                category={participantCategory}
+              />
+            </Suspense>
           </div>
         </div>
       </main>
