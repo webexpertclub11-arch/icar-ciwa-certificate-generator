@@ -90,6 +90,11 @@ export const initializeDB = async () => {
         try {
             await db.execute(`ALTER TABLE participants ADD COLUMN is_restricted INTEGER DEFAULT 0;`);
         } catch (_) { }
+        try { await db.execute(`ALTER TABLE participants ADD COLUMN pre_eval INTEGER DEFAULT 0;`); } catch (_) { }
+        try { await db.execute(`ALTER TABLE participants ADD COLUMN post_eval INTEGER DEFAULT 0;`); } catch (_) { }
+        try { await db.execute(`ALTER TABLE certificate_downloads ADD COLUMN pre_eval INTEGER DEFAULT 0;`); } catch (_) { }
+        try { await db.execute(`ALTER TABLE certificate_downloads ADD COLUMN post_eval INTEGER DEFAULT 0;`); } catch (_) { }
+
 
         // Table 3: Organizations & Categories (KVK, ICAR Institute, SAU, CAU)
         await db.execute(`
@@ -194,7 +199,9 @@ export const initializeDB = async () => {
                     instituteName: row.institute_name || '',
                     atariZone: row.atari_zone || '',
                     trainingDates: row.training_dates || '',
-                    isRestricted: row.is_restricted === 1
+                    isRestricted: row.is_restricted === 1,
+                    preEval: row.pre_eval === 1,
+                    postEval: row.post_eval === 1
                 }));
                 localStorage.setItem(PARTICIPANTS_STORAGE_KEY, JSON.stringify(formattedList));
                 if (typeof window !== 'undefined') {
@@ -254,7 +261,9 @@ export const fetchParticipantsFromDB = async () => {
                 instituteName: row.institute_name || '',
                 atariZone: row.atari_zone || '',
                 trainingDates: row.training_dates || '',
-                isRestricted: row.is_restricted === 1
+                isRestricted: row.is_restricted === 1,
+                preEval: row.pre_eval === 1,
+                postEval: row.post_eval === 1
             }));
             localStorage.setItem(PARTICIPANTS_STORAGE_KEY, JSON.stringify(formattedList));
             return formattedList;
@@ -307,8 +316,8 @@ export const recordDownloadToDB = async (data) => {
         await db.execute({
             sql: `
         INSERT OR REPLACE INTO certificate_downloads 
-        (registered_name, certificate_name, salutation, email, mobile, wp_no, kvk_name, atari_zone, serial_number, download_time) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (registered_name, certificate_name, salutation, email, mobile, wp_no, kvk_name, atari_zone, serial_number, download_time, pre_eval, post_eval) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
             args: [
                 data.registeredName || 'Unknown',
@@ -320,7 +329,9 @@ export const recordDownloadToDB = async (data) => {
                 data.kvkName || 'Unknown',
                 data.atariZone || 'Unknown',
                 data.serialNumber || 'N/A',
-                istTime
+                istTime,
+                data.preEval ? 1 : 0,
+                data.postEval ? 1 : 0
             ]
         });
         console.log("Successfully saved locked certificate record with IST timestamp to Database!");
@@ -484,7 +495,9 @@ export const updateParticipantRecord = (id, updatedData) => {
                 instituteName: updatedData.instituteName !== undefined ? updatedData.instituteName.trim() : p.instituteName,
                 atariZone: updatedData.atariZone !== undefined ? updatedData.atariZone.trim() : p.atariZone,
                 trainingDates: updatedData.trainingDates !== undefined ? updatedData.trainingDates.trim() : p.trainingDates,
-                isRestricted: updatedData.isRestricted !== undefined ? updatedData.isRestricted : p.isRestricted
+                isRestricted: updatedData.isRestricted !== undefined ? updatedData.isRestricted : p.isRestricted,
+                preEval: updatedData.preEval !== undefined ? updatedData.preEval : p.preEval,
+                postEval: updatedData.postEval !== undefined ? updatedData.postEval : p.postEval
             };
             return updatedParticipant;
         }
@@ -502,7 +515,7 @@ export const updateParticipantRecord = (id, updatedData) => {
             (async () => {
                 try {
                     await db.execute({
-                        sql: `UPDATE participants SET name = ?, serial_number = ?, institute_name = ?, atari_zone = ?, training_dates = ?, is_restricted = ? WHERE id = ? OR serial_number = ?`,
+                        sql: `UPDATE participants SET name = ?, serial_number = ?, institute_name = ?, atari_zone = ?, training_dates = ?, is_restricted = ?, pre_eval = ?, post_eval = ? WHERE id = ? OR serial_number = ?`,
                         args: [
                             updatedParticipant.name || '',
                             updatedParticipant.serialNumber || '',
@@ -510,6 +523,8 @@ export const updateParticipantRecord = (id, updatedData) => {
                             updatedParticipant.atariZone || '',
                             updatedParticipant.trainingDates || '',
                             updatedParticipant.isRestricted ? 1 : 0,
+                            updatedParticipant.preEval ? 1 : 0,
+                            updatedParticipant.postEval ? 1 : 0,
                             id || '',
                             updatedParticipant.serialNumber || ''
                         ]
@@ -555,7 +570,9 @@ export const checkCertificateLockStatus = async (serialNumber, registeredName) =
                     mobile: row.mobile,
                     wp: row.wp_no,
                     isLocked: row.is_locked === 1 || row.is_locked === '1' || row.is_locked === true,
-                    downloadTime: row.download_time
+                    downloadTime: row.download_time,
+                    preEval: row.pre_eval === 1,
+                    postEval: row.post_eval === 1
                 };
 
                 // Sync latest DB data back to LocalStorage caching
@@ -861,7 +878,7 @@ export const fetchAdminMetrics = async () => {
 
     const totalIssued = uniqueIssuedSerials.size;
     const totalParticipants = participantsList.length;
-    
+
     let remainingParticipants = 0;
     participantsList.forEach(p => {
         if (p) {
@@ -1034,6 +1051,8 @@ export const exportDBToExcel = async (logsToExport = null) => {
             'ATARI Zone': item.atariZone || 'N/A',
             'Serial Number': item.serialNumber || 'N/A',
             'Lock Status': item.isLocked ? 'Locked' : 'Unlocked',
+            'Pre Evaluation': item.preEval ? 'Submitted' : 'Pending',
+            'Post Evaluation': item.postEval ? 'Submitted' : 'Pending',
             'Time of Download': item.downloadTime ? new Date(item.downloadTime).toLocaleString() : 'N/A'
         };
     });
@@ -1050,6 +1069,8 @@ export const exportDBToExcel = async (logsToExport = null) => {
             'ATARI Zone': 'N/A',
             'Serial Number': 'N/A',
             'Lock Status': 'N/A',
+            'Pre Evaluation': 'N/A',
+            'Post Evaluation': 'N/A',
             'Time of Download': 'N/A'
         });
     }

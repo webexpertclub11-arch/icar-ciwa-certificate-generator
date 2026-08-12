@@ -17,11 +17,16 @@ const UserDashboard = ({
   onGoToCertificateWorkspace,
   onGoToSupport,
   onLogout,
-  isAdminRestricted
+  isAdminRestricted,
+  preEval,
+  setPreEval,
+  postEval,
+  setPostEval
 }) => {
   const [announcements, setAnnouncements] = useState([]);
   const [settingsVersion, setSettingsVersion] = useState(0);
   const [remainingSeconds, setRemainingSeconds] = useState(600);
+  const [evalModalMessage, setEvalModalMessage] = useState(null);
 
   useEffect(() => {
     const fetchAnnouncements = async () => {
@@ -260,15 +265,59 @@ const UserDashboard = ({
                   </div>
                 )}
               </div>
+
+              {!isLocked && isDownloadAllowed && (
+                <div className="eval-checks-box" style={{ marginTop: '16px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <p style={{ fontSize: '13px', fontWeight: 600, marginBottom: '8px', color: '#1e293b' }}>Required Evaluation Forms</p>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13.5px', marginBottom: '4px', cursor: 'pointer', color: '#334155' }}>
+                    <input
+                      type="checkbox"
+                      checked={preEval}
+                      onChange={async (e) => {
+                        const val = e.target.checked;
+                        setPreEval(val);
+                        const { updateParticipantRecord } = await import('../utils/dbTracker');
+                        updateParticipantRecord(null, { serialNumber: assignedSerialNumber, preEval: val, postEval });
+                      }}
+                    />
+                    Did you submit Pre Evaluation?
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13.5px', cursor: 'pointer', color: '#334155' }}>
+                    <input
+                      type="checkbox"
+                      checked={postEval}
+                      onChange={async (e) => {
+                        const val = e.target.checked;
+                        setPostEval(val);
+                        const { updateParticipantRecord } = await import('../utils/dbTracker');
+                        updateParticipantRecord(null, { serialNumber: assignedSerialNumber, preEval, postEval: val });
+                      }}
+                    />
+                    Did you submit Post Evaluation?
+                  </label>
+                </div>
+              )}
             </div>
 
-            <div className="cta-box-bottom">
+            <div className="cta-box-bottom" style={{ marginTop: '16px' }}>
               {!isDownloadAllowed ? (
                 <button className="btn-user-primary width-100" style={{ backgroundColor: '#ef4444' }} onClick={onGoToSupport}>
                   ⚠️ Contact Admin to Unlock Access
                 </button>
               ) : (
-                <button className="btn-user-primary width-100" onClick={onGoToCertificateWorkspace}>
+                <button className="btn-user-primary width-100" onClick={(e) => {
+                  if (!isLocked && (!preEval || !postEval)) {
+                    if (!preEval && !postEval) {
+                      setEvalModalMessage('Please submit both the Pre Evaluation and Post Evaluation forms to unlock your certificate download.');
+                    } else if (!preEval) {
+                      setEvalModalMessage('Please submit the Pre Evaluation form to unlock your certificate download.');
+                    } else if (!postEval) {
+                      setEvalModalMessage('Please submit the Post Evaluation form to unlock your certificate download.');
+                    }
+                    return;
+                  }
+                  onGoToCertificateWorkspace();
+                }}>
                   {isLocked ? '📜 View / Download Official PDF' : '🎓 Generate My Certificate Now →'}
                 </button>
               )}
@@ -278,6 +327,60 @@ const UserDashboard = ({
         </div>
 
       </main>
+
+      {/* Glassmorphism Evaluation Alert Modal */}
+      {evalModalMessage && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(255, 255, 255, 0.1)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          animation: 'evalModalBg 0.3s ease-out'
+        }}>
+          <style>{`
+            @keyframes evalModalBg { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes evalModalSlide { from { opacity: 0; transform: translateY(-20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+          `}</style>
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.85)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: '1px solid rgba(255, 255, 255, 0.5)',
+            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15), inset 0 0 0 1px rgba(255,255,255,0.7)',
+            padding: '36px', borderRadius: '24px', maxWidth: '420px', width: '90%',
+            textAlign: 'center',
+            position: 'relative',
+            animation: 'evalModalSlide 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}>
+            <div style={{
+              fontSize: '54px', marginBottom: '12px', display: 'inline-block',
+              filter: 'drop-shadow(0 8px 16px rgba(245, 158, 11, 0.4))',
+              lineHeight: '1'
+            }}>
+              ⚠️
+            </div>
+            <h3 style={{ margin: '0 0 12px 0', color: '#1e293b', fontSize: '20px', fontWeight: '700', letterSpacing: '-0.3px' }}>Action Required</h3>
+            <p style={{ margin: '0 0 28px 0', color: '#475569', fontSize: '15px', lineHeight: '1.6', fontWeight: '500' }}>
+              {evalModalMessage}
+            </p>
+            <button
+              style={{
+                background: 'linear-gradient(to right, #047857, #065f46)',
+                color: '#fff', border: 'none', padding: '12px 24px',
+                borderRadius: '12px', cursor: 'pointer', fontSize: '15px', fontWeight: '600',
+                transition: 'all 0.2s ease', width: '100%',
+                boxShadow: '0 4px 12px rgba(4, 120, 87, 0.2)'
+              }}
+              onClick={() => setEvalModalMessage(null)}
+              onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(4, 120, 87, 0.3)'; }}
+              onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(4, 120, 87, 0.2)'; }}
+            >
+              I Understand
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

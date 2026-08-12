@@ -62,6 +62,8 @@ function App() {
   const [userActiveTab, setUserActiveTab] = useState('dashboard'); // 'dashboard' or 'certificate'
   const [formStep, setFormStep] = useState('edit'); // 'edit' or 'preview'
   const [isAdminRestricted, setIsAdminRestricted] = useState(false);
+  const [preEval, setPreEval] = useState(false);
+  const [postEval, setPostEval] = useState(false);
 
   const [assignedSerialNumber, setAssignedSerialNumber] = useState('CIWA/2026/NOGRA/166');
   const [registeredName, setRegisteredName] = useState('');
@@ -148,6 +150,8 @@ function App() {
       setParticipantCategory(orgData.category || participant.category || '');
       setSelectedZone(lockRecord.atariZone || orgData.officialFullName || zoneData.fullName || '');
       setDownloadTime(lockRecord.downloadTime);
+      setPreEval(lockRecord.preEval || false);
+      setPostEval(lockRecord.postEval || false);
 
       if (lockRecord.isLocked) {
         setIsLocked(true);
@@ -172,6 +176,8 @@ function App() {
       } else if (participant.atariZone) {
         setSelectedZone(participant.atariZone || zoneData.officialFullName || zoneData.fullName);
       }
+      setPreEval(participant.preEval || false);
+      setPostEval(participant.postEval || false);
       setIsLocked(false);
       setDownloadTime(null);
       setFormStep('edit');
@@ -296,6 +302,8 @@ function App() {
     setIsLocked(false);
     setFormStep('edit');
     setIsAdminRestricted(false);
+    setPreEval(false);
+    setPostEval(false);
   }, []);
 
   // Download PDF and immediately Lock Certificate
@@ -322,7 +330,9 @@ function App() {
         wp: participantContact.wp,
         kvkName: instituteName,
         atariZone: selectedZone,
-        serialNumber: assignedSerialNumber
+        serialNumber: assignedSerialNumber,
+        preEval,
+        postEval
       };
 
       await recordDownloadToDB(payload);
@@ -445,6 +455,10 @@ function App() {
           onGoToSupport={() => setUserActiveTab('support')}
           onLogout={handleLogout}
           isAdminRestricted={isAdminRestricted}
+          preEval={preEval}
+          setPreEval={setPreEval}
+          postEval={postEval}
+          setPostEval={setPostEval}
         />
       </Suspense>
     );
@@ -475,7 +489,7 @@ function App() {
         </div>
       )}
 
-      <Suspense fallback={<div className="toast-notification toast-info" style={{position:'absolute', top:'10px', right:'10px', zIndex:999}}><span>Loading Form...</span></div>}>
+      <Suspense fallback={<div className="toast-notification toast-info" style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 999 }}><span>Loading Form...</span></div>}>
         <CertificateForm
           salutation={salutation}
           setSalutation={setSalutation}
@@ -548,7 +562,7 @@ function App() {
               opacity: isSecurityBlurred ? 0.05 : 1
             }}
           >
-            <Suspense fallback={<div style={{padding:'20px'}}>Loading Certificate Canvas...</div>}>
+            <Suspense fallback={<div style={{ padding: '20px' }}>Loading Certificate Canvas...</div>}>
               <Certificate
                 ref={certificateRef}
                 salutation={salutation}
