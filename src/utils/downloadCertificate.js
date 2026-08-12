@@ -109,18 +109,26 @@ export const downloadCertificateAsPDF = async (certificateRef, participantName) 
 
     const pdfFileName = `Certificate_${sanitizedName}.pdf`;
 
-    // Export PDF as Data URI to guarantee .pdf file extension in Chrome
+    // Export PDF using a Blob URL for maximum cross-browser compatibility (fixes iOS Safari issues)
     try {
-      const dataUri = pdf.output('datauristring');
+      const blob = pdf.output('blob');
+      const blobUrl = URL.createObjectURL(blob);
       const downloadLink = document.createElement('a');
-      downloadLink.href = dataUri;
+      downloadLink.href = blobUrl;
       downloadLink.download = pdfFileName;
-      downloadLink.setAttribute('target', '_blank');
+      
+      // On iOS, setting target="_blank" on async Blob URLs can sometimes be blocked, 
+      // but without it, it might navigate away. A standard click usually triggers the download prompt in iOS 13+.
       document.body.appendChild(downloadLink);
       downloadLink.click();
-      document.body.removeChild(downloadLink);
+      
+      // Clean up after a short delay to ensure the download has started
+      setTimeout(() => {
+        document.body.removeChild(downloadLink);
+        URL.revokeObjectURL(blobUrl);
+      }, 500);
     } catch (e) {
-      console.warn("Data URI download notice, using pdf.save():", e);
+      console.warn("Blob download failed, falling back to pdf.save():", e);
       pdf.save(pdfFileName);
     }
 
