@@ -160,26 +160,26 @@ Status: VERIFIED & AUTHENTIC`;
 
                       <div className="training-details">
                         <p className="training-line-1">
-                          has successfully completed the Training Programme on <strong className="highlight-program">“Strengthening Agriculture Research</strong>
+                          has successfully completed the Training Programme on <strong className="highlight-program">‘Strengthening Agriculture Research</strong>
                         </p>
                         <p className="training-line-2">
-                          <strong className="highlight-program">with Gender Perspective for Sustainable Agri-Food System”</strong> organized by
+                          <strong className="highlight-program">with Gender Perspective for Sustainable Agri-Food System’</strong> organized by
                         </p>
                         <p className="training-organizer">
                           {settings.trainingOrganizer || 'ICAR-Central Institute for Women in Agriculture, Bhubaneswar'}
                         </p>
                         <p className="training-dates">
-                          {displayTrainingDates}
+                          {displayTrainingDates}.
                         </p>
                       </div>
                     </>
                   ) : (
                     <div className="training-details icar-training-details" style={{ lineHeight: '1.5', marginTop: '-5px' }}>
                       <p className="training-line-1">
-                        has successfully completed the Training Programme on <strong className="highlight-program">“Strengthening Agriculture</strong>
+                        has successfully completed the Training Programme on <strong className="highlight-program">‘Strengthening Agriculture</strong>
                       </p>
                       <p className="training-line-2">
-                        <strong className="highlight-program">Research with Gender Perspective for Sustainable Agri-Food System” for Nodal</strong>
+                        <strong className="highlight-program">Research with Gender Perspective for Sustainable Agri-Food System’ for Nodal</strong>
                       </p>
                       <p className="training-line-3" style={{ margin: '4px 0', fontFamily: '"EB Garamond", "Georgia", serif', color: '#003300' }}>
                         <strong className="highlight-program">& Co-Nodal Officers- Gender Research in Agriculture (NO-GRA)</strong> organized by
@@ -188,7 +188,7 @@ Status: VERIFIED & AUTHENTIC`;
                         {settings.trainingOrganizer || 'ICAR-Central Institute for Women in Agriculture, Bhubaneswar'}
                       </p>
                       <p className="training-dates">
-                        {displayTrainingDates}
+                        {displayTrainingDates}.
                       </p>
                     </div>
                   )}
