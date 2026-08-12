@@ -109,7 +109,7 @@ export const downloadCertificateAsPDF = async (certificateRef, participantName) 
 
     const pdfFileName = `Certificate_${sanitizedName}.pdf`;
 
-    // Export PDF using a Blob URL for maximum cross-browser compatibility (fixes iOS Safari issues)
+    // Export PDF using a Blob URL for maximum cross-browser compatibility
     try {
       const blob = pdf.output('blob');
       const blobUrl = URL.createObjectURL(blob);
@@ -117,16 +117,83 @@ export const downloadCertificateAsPDF = async (certificateRef, participantName) 
       downloadLink.href = blobUrl;
       downloadLink.download = pdfFileName;
       
-      // On iOS, setting target="_blank" on async Blob URLs can sometimes be blocked, 
-      // but without it, it might navigate away. A standard click usually triggers the download prompt in iOS 13+.
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-      
-      // Clean up after a short delay to ensure the download has started
-      setTimeout(() => {
-        document.body.removeChild(downloadLink);
-        URL.revokeObjectURL(blobUrl);
-      }, 500);
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+      if (isIOS) {
+        // iOS Safari strictly blocks async downloads. Present a direct button.
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100vw';
+        overlay.style.height = '100vh';
+        overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.9)';
+        overlay.style.zIndex = '999999';
+        overlay.style.display = 'flex';
+        overlay.style.flexDirection = 'column';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+
+        const title = document.createElement('h2');
+        title.innerText = 'Certificate is Ready!';
+        title.style.color = 'white';
+        title.style.marginBottom = '20px';
+        title.style.fontFamily = 'sans-serif';
+        title.style.textAlign = 'center';
+
+        const subtitle = document.createElement('p');
+        subtitle.innerText = 'Safari requires you to tap to download.';
+        subtitle.style.color = '#cbd5e1';
+        subtitle.style.marginBottom = '30px';
+        subtitle.style.fontFamily = 'sans-serif';
+
+        downloadLink.innerText = 'Tap to Download PDF';
+        downloadLink.style.padding = '16px 32px';
+        downloadLink.style.backgroundColor = '#10b981';
+        downloadLink.style.color = 'white';
+        downloadLink.style.fontSize = '18px';
+        downloadLink.style.fontWeight = 'bold';
+        downloadLink.style.borderRadius = '8px';
+        downloadLink.style.textDecoration = 'none';
+        downloadLink.style.boxShadow = '0 4px 6px rgba(0,0,0,0.3)';
+
+        const closeBtn = document.createElement('button');
+        closeBtn.innerText = 'Close';
+        closeBtn.style.marginTop = '30px';
+        closeBtn.style.padding = '10px 20px';
+        closeBtn.style.backgroundColor = 'transparent';
+        closeBtn.style.color = '#94a3b8';
+        closeBtn.style.border = '1px solid #94a3b8';
+        closeBtn.style.borderRadius = '6px';
+        closeBtn.style.cursor = 'pointer';
+        closeBtn.style.fontSize = '16px';
+
+        closeBtn.onclick = () => {
+          if (document.body.contains(overlay)) document.body.removeChild(overlay);
+        };
+
+        downloadLink.onclick = () => {
+          setTimeout(() => {
+            if (document.body.contains(overlay)) document.body.removeChild(overlay);
+          }, 2000);
+        };
+
+        overlay.appendChild(title);
+        overlay.appendChild(subtitle);
+        overlay.appendChild(downloadLink);
+        overlay.appendChild(closeBtn);
+        document.body.appendChild(overlay);
+
+      } else {
+        // Standard auto-download for Android / Chrome / Edge
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        
+        setTimeout(() => {
+          document.body.removeChild(downloadLink);
+          URL.revokeObjectURL(blobUrl);
+        }, 500);
+      }
     } catch (e) {
       console.warn("Blob download failed, falling back to pdf.save():", e);
       pdf.save(pdfFileName);
