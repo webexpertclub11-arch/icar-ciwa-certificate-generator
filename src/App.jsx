@@ -187,7 +187,10 @@ function App() {
     setCertSettings(getCertificateSettings());
 
     const permissions = getParticipantPermissions();
-    const isSpecificallyRestricted = (participant.isRestricted === 1 || participant.isRestricted === true) || (permissions?.disabledSerials?.[sNo] || (participant.atariZone && permissions?.disabledZones?.[participant.atariZone]));
+    
+    // Temporarily disabled per user request to allow everyone to download
+    const isSpecificallyRestricted = false;
+    
     const isAllowed = !isSpecificallyRestricted && isParticipantDownloadEnabled(sNo, participant.atariZone);
     setUserActiveTab(isSpecificallyRestricted ? 'support' : 'dashboard');
     setIsAdminRestricted(!!isSpecificallyRestricted);

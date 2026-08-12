@@ -240,19 +240,20 @@ export const isParticipantDownloadEnabled = (serialNumber = '', atariZone = '') 
         return false;
     }
 
-    const permissions = getParticipantPermissions() || {};
-    const cleanSerial = serialNumber ? String(serialNumber).trim().toUpperCase() : '';
-    const cleanZone = atariZone ? String(atariZone).trim() : '';
+    // Temporarily disabled per user request to allow everyone to download
+    // const permissions = getParticipantPermissions() || {};
+    // const cleanSerial = serialNumber ? String(serialNumber).trim().toUpperCase() : '';
+    // const cleanZone = atariZone ? String(atariZone).trim() : '';
 
-    // 1. Check if individual serial is explicitly disabled
-    if (cleanSerial && permissions.disabledSerials && permissions.disabledSerials[cleanSerial]) {
-        return false;
-    }
+    // // 1. Check if individual serial is explicitly disabled
+    // if (cleanSerial && permissions.disabledSerials && permissions.disabledSerials[cleanSerial]) {
+    //     return false;
+    // }
 
-    // 2. Check if entire ATARI Zone is disabled
-    if (cleanZone && permissions.disabledZones && permissions.disabledZones[cleanZone]) {
-        return false;
-    }
+    // // 2. Check if entire ATARI Zone is disabled
+    // if (cleanZone && permissions.disabledZones && permissions.disabledZones[cleanZone]) {
+    //     return false;
+    // }
 
     return true;
 };
