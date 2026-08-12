@@ -168,8 +168,8 @@
 
 .participant-fullname.icar-institute-name {
   font-family: 'Lucida Calligraphy', 'Dancing Script', 'EB Garamond', cursive, serif !important;
-  color: #2b5d2b !important;
-  /* precise dark green */
+  color: #990000 !important;
+  /* changed from precise dark green to match kvk red */
   font-size: 26px !important;
   font-weight: 700 !important;
   font-style: italic !important;
