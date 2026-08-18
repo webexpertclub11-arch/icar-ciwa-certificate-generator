@@ -325,13 +325,18 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
       return;
     }
 
-    const success = await addOrganizationRecord({
+    const result = await addOrganizationRecord({
       category: newOrgCategory,
       fullName: finalFullName || finalShortName,
       shortName: finalShortName || finalFullName
     });
 
-    if (success) {
+    if (result && result.isDuplicate) {
+      triggerToast(`An organization with the name "${finalShortName}" is already registered.`, "warning", "Duplicate Detected");
+      return;
+    }
+
+    if (result === true || (result && result.success)) {
       triggerToast(`Organization "${finalShortName}" added successfully!`, "success", "Organization Added");
       setNewOrgName('');
       setNewOrgFullName('');
@@ -415,7 +420,7 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
 
       const result = await bulkRegisterOrganizations(parsedRows);
       if (result.success) {
-        triggerToast(`Bulk Import Successful! Imported ${result.addedCount} institutes/organizations into Database.`, "success", "Bulk Import Complete");
+        setBulkResultModal(result);
         const updatedOrgs = await fetchOrganizationsList();
         setOrganizationsList(updatedOrgs);
       } else {

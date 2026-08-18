@@ -1132,12 +1132,20 @@ export const fetchOrganizationsList = async (categoryFilter = null) => {
  */
 export const addOrganizationRecord = async (orgData) => {
     const db = getDb();
-    if (!db) return false;
+    if (!db) return { success: false, error: 'Database unavailable' };
 
     const fullName = (orgData.fullName || orgData.name || orgData.shortName || '').trim();
     const shortName = (orgData.shortName || orgData.name || fullName).trim();
 
     try {
+        const currentOrgs = await fetchOrganizationsList();
+        const existingShortNames = new Set(currentOrgs.filter(o => o.shortName).map(o => o.shortName.toLowerCase()));
+        const existingFullNames = new Set(currentOrgs.filter(o => o.fullName).map(o => o.fullName.toLowerCase()));
+
+        if (existingShortNames.has(shortName.toLowerCase()) || existingFullNames.has(fullName.toLowerCase())) {
+            return { success: false, isDuplicate: true };
+        }
+
         await db.execute({
             sql: `INSERT INTO organizations (category, short_name, is_active, full_name, created_at)
                   VALUES (?, ?, 1, ?, ?)`,
@@ -1149,10 +1157,10 @@ export const addOrganizationRecord = async (orgData) => {
             ]
         });
         console.log("Successfully added new organization record with IST timestamp to Database!");
-        return true;
+        return { success: true };
     } catch (err) {
         console.error("Error adding organization record:", err);
-        return false;
+        return { success: false, error: err.message };
     }
 };
 
@@ -1201,7 +1209,13 @@ export const bulkRegisterOrganizations = async (rawArray) => {
     const db = getDb();
     if (!db || !Array.isArray(rawArray)) return { success: false, addedCount: 0, error: 'Database connection unavailable' };
 
+    const currentOrgs = await fetchOrganizationsList();
+    const existingShortNames = new Set(currentOrgs.filter(o => o.shortName).map(o => o.shortName.toLowerCase()));
+    const existingFullNames = new Set(currentOrgs.filter(o => o.fullName).map(o => o.fullName.toLowerCase()));
+
     let addedCount = 0;
+    const skippedItems = [];
+
     for (const item of rawArray) {
         if (!item || typeof item !== 'object') continue;
 
@@ -1226,6 +1240,22 @@ export const bulkRegisterOrganizations = async (rawArray) => {
 
         if (!finalShortName && !finalFullName) continue;
 
+        const isDuplicate = existingShortNames.has(finalShortName.toLowerCase()) ||
+            existingFullNames.has(finalFullName.toLowerCase());
+
+        if (isDuplicate) {
+            skippedItems.push({
+                category,
+                shortName: finalShortName,
+                fullName: finalFullName,
+                reason: `Organization already exists in Database`
+            });
+            continue;
+        }
+
+        existingShortNames.add(finalShortName.toLowerCase());
+        existingFullNames.add(finalFullName.toLowerCase());
+
         try {
             await db.execute({
                 sql: `INSERT INTO organizations (category, short_name, is_active, full_name, created_at)
@@ -1243,7 +1273,12 @@ export const bulkRegisterOrganizations = async (rawArray) => {
         }
     }
 
-    return { success: true, addedCount };
+    return {
+        success: true,
+        successCount: addedCount,
+        skippedCount: skippedItems.length,
+        skippedItems
+    };
 };
 
 /**
