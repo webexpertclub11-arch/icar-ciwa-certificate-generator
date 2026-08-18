@@ -280,7 +280,7 @@ const UserDashboard = ({
                         updateParticipantRecord(null, { serialNumber: assignedSerialNumber, preEval: val, postEval });
                       }}
                     />
-                    Did you submit Pre Evaluation?
+                    I have submitted Pre Evaluation
                   </label>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13.5px', cursor: 'pointer', color: '#334155' }}>
                     <input
@@ -293,7 +293,7 @@ const UserDashboard = ({
                         updateParticipantRecord(null, { serialNumber: assignedSerialNumber, preEval, postEval: val });
                       }}
                     />
-                    Did you submit Post Evaluation?
+                    I have submitted Post Evaluation
                   </label>
                 </div>
               )}
