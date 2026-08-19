@@ -179,11 +179,11 @@ Status: VERIFIED & AUTHENTIC`;
                         has successfully completed the Training Programme on <strong className="highlight-program">‘Strengthening Agriculture</strong>
                       </p>
                       <p className="training-line-2">
-                        <strong className="highlight-program">Research with Gender Perspective for Sustainable Agri-Food System’ for Nodal</strong>
+                        <strong className="highlight-program">with Gender Perspective for Sustainable Agri-Food System’</strong> organized by
                       </p>
-                      <p className="training-line-3" style={{ margin: '4px 0', fontFamily: '"EB Garamond", "Georgia", serif', color: '#003300' }}>
-                        <strong className="highlight-program">& Co-Nodal Officers- Gender Research in Agriculture (NO-GRA)</strong> organized by
-                      </p>
+                      {/* <p className="training-line-3" style={{ margin: '4px 0', fontFamily: '"EB Garamond", "Georgia", serif', color: '#003300' }}>
+                        <strong className="highlight-program"></strong> organized by
+                      </p> */}
                       <p className="training-organizer">
                         {settings.trainingOrganizer || 'ICAR-Central Institute for Women in Agriculture, Bhubaneswar'}
                       </p>
