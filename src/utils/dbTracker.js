@@ -1138,13 +1138,6 @@ export const addOrganizationRecord = async (orgData) => {
     const shortName = (orgData.shortName || orgData.name || fullName).trim();
 
     try {
-        const currentOrgs = await fetchOrganizationsList();
-        const existingShortNames = new Set(currentOrgs.filter(o => o.shortName).map(o => o.shortName.toLowerCase()));
-        const existingFullNames = new Set(currentOrgs.filter(o => o.fullName).map(o => o.fullName.toLowerCase()));
-
-        if (existingShortNames.has(shortName.toLowerCase()) || existingFullNames.has(fullName.toLowerCase())) {
-            return { success: false, isDuplicate: true };
-        }
 
         await db.execute({
             sql: `INSERT INTO organizations (category, short_name, is_active, full_name, created_at)
@@ -1210,8 +1203,6 @@ export const bulkRegisterOrganizations = async (rawArray) => {
     if (!db || !Array.isArray(rawArray)) return { success: false, addedCount: 0, error: 'Database connection unavailable' };
 
     const currentOrgs = await fetchOrganizationsList();
-    const existingShortNames = new Set(currentOrgs.filter(o => o.shortName).map(o => o.shortName.toLowerCase()));
-    const existingFullNames = new Set(currentOrgs.filter(o => o.fullName).map(o => o.fullName.toLowerCase()));
 
     let addedCount = 0;
     const skippedItems = [];
@@ -1239,22 +1230,6 @@ export const bulkRegisterOrganizations = async (rawArray) => {
         const finalFullName = rawFull || rawName || rawShort;
 
         if (!finalShortName && !finalFullName) continue;
-
-        const isDuplicate = existingShortNames.has(finalShortName.toLowerCase()) ||
-            existingFullNames.has(finalFullName.toLowerCase());
-
-        if (isDuplicate) {
-            skippedItems.push({
-                category,
-                shortName: finalShortName,
-                fullName: finalFullName,
-                reason: `Organization already exists in Database`
-            });
-            continue;
-        }
-
-        existingShortNames.add(finalShortName.toLowerCase());
-        existingFullNames.add(finalFullName.toLowerCase());
 
         try {
             await db.execute({

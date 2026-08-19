@@ -3116,6 +3116,29 @@ const AdminDashboard = ({ onExitAdmin, onPreviewCertificate }) => {
                 </div>
               </div>
 
+              {bulkResultModal.skippedCount > 0 && bulkResultModal.skippedItems?.length > 0 && (
+                <div style={{ marginBottom: '16px', maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border-medium)', borderRadius: '8px' }}>
+                  <table className="admin-data-table" style={{ margin: 0, fontSize: '13px' }}>
+                    <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                      <tr>
+                        <th>Name / Institute</th>
+                        <th>Identifier / Short Name</th>
+                        <th>Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bulkResultModal.skippedItems.map((item, idx) => (
+                        <tr key={idx} style={{ background: '#fff' }}>
+                          <td>{item.fullName || item.name || '—'}</td>
+                          <td><code style={{ fontSize: '12px', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>{item.shortName || item.serialNumber || '—'}</code></td>
+                          <td style={{ color: 'var(--accent-rose)', fontWeight: 500 }}>{item.reason}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
               <button type="button" className="btn-admin-primary" onClick={() => setBulkResultModal(null)}>
                 Close & Return
               </button>
